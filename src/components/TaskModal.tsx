@@ -63,6 +63,7 @@ export function TaskModal({ task, onClose, workspaceId }: TaskModalProps) {
 
         if (task) {
           updateTask(savedTask);
+          onClose();
         } else {
           addTask(savedTask);
           addEvent({
@@ -72,8 +73,28 @@ export function TaskModal({ task, onClose, workspaceId }: TaskModalProps) {
             message: `New task: ${savedTask.title}`,
             created_at: new Date().toISOString(),
           });
+
+          // If planning mode is enabled, auto-generate questions and keep modal open
+          if (usePlanningMode) {
+            // Trigger question generation in background
+            fetch(`/api/tasks/${savedTask.id}/planning`, { method: 'POST' })
+              .then(() => {
+                // Update our local task reference and switch to planning tab
+                updateTask({ ...savedTask, status: 'planning' });
+              })
+              .catch(console.error);
+            
+            // Log the planning start
+            addEvent({
+              id: crypto.randomUUID(),
+              type: 'task_status_changed',
+              task_id: savedTask.id,
+              message: `📋 Planning started for: ${savedTask.title}`,
+              created_at: new Date().toISOString(),
+            });
+          }
+          onClose();
         }
-        onClose();
       }
     } catch (error) {
       console.error('Failed to save task:', error);

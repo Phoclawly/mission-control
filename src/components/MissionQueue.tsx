@@ -158,19 +158,30 @@ function TaskCard({ task, onDragStart, onClick, isDragging }: TaskCardProps) {
     urgent: 'bg-mc-accent-red/20',
   };
 
+  const isPlanning = task.status === 'planning';
+
   return (
     <div
       draggable
       onDragStart={(e) => onDragStart(e, task)}
       onClick={onClick}
-      className={`bg-mc-bg-secondary border border-mc-border rounded p-3 cursor-pointer hover:border-mc-accent/50 transition-all ${
+      className={`bg-mc-bg-secondary border rounded p-3 cursor-pointer transition-all ${
         isDragging ? 'opacity-50 scale-95' : ''
-      }`}
+      } ${isPlanning ? 'border-purple-500/50 hover:border-purple-500' : 'border-mc-border hover:border-mc-accent/50'}`}
     >
       <div className="flex items-start gap-2">
         <GripVertical className="w-4 h-4 text-mc-text-secondary mt-0.5 cursor-grab" />
         <div className="flex-1 min-w-0">
           <h4 className="text-sm font-medium truncate">{task.title}</h4>
+          
+          {/* Planning mode indicator */}
+          {isPlanning && (
+            <div className="flex items-center gap-2 mt-2 p-2 bg-purple-500/10 rounded border border-purple-500/20">
+              <div className="w-2 h-2 bg-purple-500 rounded-full animate-pulse" />
+              <span className="text-xs text-purple-400">Click to continue planning</span>
+            </div>
+          )}
+
           {task.assigned_agent && (
             <div className="flex items-center gap-1 mt-2">
               <span className="text-sm">{(task.assigned_agent as unknown as { avatar_emoji: string }).avatar_emoji}</span>

@@ -94,7 +94,12 @@ export async function POST(request: NextRequest) {
     const id = uuidv4();
     const now = new Date().toISOString();
 
-    const workspaceId = validatedData.workspace_id || 'default';
+    // Resolve workspace_id: use provided value, fall back to first available workspace
+    let workspaceId = validatedData.workspace_id;
+    if (!workspaceId) {
+      const defaultWorkspace = queryOne<{ id: string }>('SELECT id FROM workspaces ORDER BY created_at ASC LIMIT 1', []);
+      workspaceId = defaultWorkspace?.id || 'default';
+    }
     const status = validatedData.status || 'inbox';
     
     run(

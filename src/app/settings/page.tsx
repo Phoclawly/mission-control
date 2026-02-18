@@ -7,18 +7,47 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Settings, Save, RotateCcw, Home, FolderOpen, Link as LinkIcon } from 'lucide-react';
+import { Settings, Save, RotateCcw, Home, FolderOpen, Link as LinkIcon, Server } from 'lucide-react';
 import { getConfig, updateConfig, resetConfig, type MissionControlConfig } from '@/lib/config';
+
+interface ServerSettings {
+  workspaceBasePath: string;
+  projectsPath: string;
+  squadStatusPath: string;
+  missionControlUrl: string;
+  port: string;
+}
 
 export default function SettingsPage() {
   const router = useRouter();
   const [config, setConfig] = useState<MissionControlConfig | null>(null);
+  const [serverSettings, setServerSettings] = useState<ServerSettings | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     setConfig(getConfig());
+
+    // Fetch real server-side paths from the API
+    fetch('/api/settings')
+      .then((res) => res.json())
+      .then((data: ServerSettings) => {
+        setServerSettings(data);
+        // Sync client config with real server paths
+        setConfig((prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            workspaceBasePath: data.workspaceBasePath,
+            projectsPath: data.projectsPath,
+            missionControlUrl: data.missionControlUrl,
+          };
+        });
+      })
+      .catch((err) => {
+        console.error('Failed to load server settings:', err);
+      });
   }, []);
 
   const handleSave = async () => {
@@ -43,6 +72,18 @@ export default function SettingsPage() {
     if (confirm('Reset all settings to defaults? This cannot be undone.')) {
       resetConfig();
       setConfig(getConfig());
+      // Re-apply server settings
+      if (serverSettings) {
+        setConfig((prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            workspaceBasePath: serverSettings.workspaceBasePath,
+            projectsPath: serverSettings.projectsPath,
+            missionControlUrl: serverSettings.missionControlUrl,
+          };
+        });
+      }
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3000);
     }
@@ -112,6 +153,43 @@ export default function SettingsPage() {
           <div className="mb-6 p-4 bg-red-500/10 border border-red-500/30 rounded text-red-400">
             ✗ {error}
           </div>
+        )}
+
+        {/* Server-Side Paths (read-only, from .env.local) */}
+        {serverSettings && (
+          <section className="mb-8 p-6 bg-mc-bg-secondary border border-mc-border rounded-lg">
+            <div className="flex items-center gap-2 mb-4">
+              <Server className="w-5 h-5 text-green-400" />
+              <h2 className="text-xl font-semibold text-mc-text">Server Configuration</h2>
+              <span className="text-xs px-2 py-0.5 bg-green-500/20 text-green-400 rounded-full">live from .env.local</span>
+            </div>
+            <p className="text-sm text-mc-text-secondary mb-4">
+              These values are read directly from the server environment (<code className="px-1 py-0.5 bg-mc-bg rounded">.env.local</code>). To change them, edit that file and restart Mission Control.
+            </p>
+
+            <div className="space-y-3">
+              <div className="flex justify-between items-center py-2 border-b border-mc-border/50">
+                <span className="text-sm font-medium text-mc-text-secondary">WORKSPACE_BASE_PATH</span>
+                <code className="text-sm text-green-400 bg-mc-bg px-3 py-1 rounded">{serverSettings.workspaceBasePath}</code>
+              </div>
+              <div className="flex justify-between items-center py-2 border-b border-mc-border/50">
+                <span className="text-sm font-medium text-mc-text-secondary">PROJECTS_PATH</span>
+                <code className="text-sm text-green-400 bg-mc-bg px-3 py-1 rounded">{serverSettings.projectsPath}</code>
+              </div>
+              <div className="flex justify-between items-center py-2 border-b border-mc-border/50">
+                <span className="text-sm font-medium text-mc-text-secondary">SQUAD_STATUS_PATH</span>
+                <code className="text-sm text-green-400 bg-mc-bg px-3 py-1 rounded">{serverSettings.squadStatusPath}</code>
+              </div>
+              <div className="flex justify-between items-center py-2 border-b border-mc-border/50">
+                <span className="text-sm font-medium text-mc-text-secondary">MISSION_CONTROL_URL</span>
+                <code className="text-sm text-green-400 bg-mc-bg px-3 py-1 rounded">{serverSettings.missionControlUrl}</code>
+              </div>
+              <div className="flex justify-between items-center py-2">
+                <span className="text-sm font-medium text-mc-text-secondary">PORT</span>
+                <code className="text-sm text-green-400 bg-mc-bg px-3 py-1 rounded">{serverSettings.port}</code>
+              </div>
+            </div>
+          </section>
         )}
 
         {/* Workspace Paths */}
@@ -216,6 +294,7 @@ export default function SettingsPage() {
             <li><code>MISSION_CONTROL_URL</code> - API URL override</li>
             <li><code>WORKSPACE_BASE_PATH</code> - Base workspace directory</li>
             <li><code>PROJECTS_PATH</code> - Projects directory</li>
+            <li><code>SQUAD_STATUS_PATH</code> - Squad status files directory (INITIATIVES.json, agent-*.json)</li>
             <li><code>OPENCLAW_GATEWAY_URL</code> - Gateway WebSocket URL</li>
             <li><code>OPENCLAW_GATEWAY_TOKEN</code> - Gateway auth token</li>
           </ul>

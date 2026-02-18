@@ -5,6 +5,8 @@ import { broadcast } from '@/lib/events';
 import { getMissionControlUrl } from '@/lib/config';
 import { UpdateTaskSchema } from '@/lib/validation';
 import type { Task, UpdateTaskRequest, Agent, TaskDeliverable } from '@/lib/types';
+import fs from 'fs';
+import path from 'path';
 
 // GET /api/tasks/[id] - Get a single task
 export async function GET(
@@ -31,6 +33,108 @@ export async function GET(
   } catch (error) {
     console.error('Failed to fetch task:', error);
     return NextResponse.json({ error: 'Failed to fetch task' }, { status: 500 });
+  }
+}
+
+/**
+ * Map Kanban status to INITIATIVES.json status
+ */
+function mapKanbanStatusToInitiative(kanbanStatus: string): string {
+  switch (kanbanStatus) {
+    case 'done':
+    case 'completed':
+      return 'completed';
+    case 'cancelled':
+      return 'canceled';
+    case 'planning':
+    case 'in_progress':
+    case 'review':
+    case 'inbox':
+    case 'backlog':
+    case 'assigned':
+    default:
+      return 'in-progress';
+  }
+}
+
+/**
+ * Write status change back to INITIATIVES.json for squad workspace tasks
+ * Task IDs follow pattern "initiative-init-XXX" → maps to INIT-XXX in INITIATIVES.json
+ */
+function writebackToInitiatives(taskId: string, taskTitle: string, newStatus: string): void {
+  try {
+    const squadStatusPath = process.env.SQUAD_STATUS_PATH || '/home/node/.openclaw/workspace/intel/status';
+    const initiativesPath = path.join(squadStatusPath, 'INITIATIVES.json');
+
+    if (!fs.existsSync(initiativesPath)) {
+      console.warn('[writeback] INITIATIVES.json not found at:', initiativesPath);
+      return;
+    }
+
+    const raw = fs.readFileSync(initiativesPath, 'utf-8');
+    const data = JSON.parse(raw);
+
+    if (!data.initiatives || !Array.isArray(data.initiatives)) {
+      console.warn('[writeback] INITIATIVES.json has no initiatives array');
+      return;
+    }
+
+    // Extract initiative ID from task ID: "initiative-init-007" → "INIT-007"
+    let initiativeId: string | null = null;
+    const idMatch = taskId.match(/^initiative-(init-\d+)$/i);
+    if (idMatch) {
+      initiativeId = idMatch[1].toUpperCase(); // e.g. "INIT-007"
+    }
+
+    // Find initiative by ID or by title prefix
+    let initiative = null;
+    if (initiativeId) {
+      initiative = data.initiatives.find((init: { id?: string }) => init.id === initiativeId);
+    }
+
+    // Fallback: match by title (task title starts with "INIT-XXX: ...")
+    if (!initiative) {
+      const titleMatch = taskTitle.match(/^(INIT-\d+):/i);
+      if (titleMatch) {
+        const titleId = titleMatch[1].toUpperCase();
+        initiative = data.initiatives.find((init: { id?: string }) => init.id === titleId);
+      }
+    }
+
+    if (!initiative) {
+      console.warn('[writeback] No matching initiative found for task:', taskId, taskTitle);
+      return;
+    }
+
+    const initiativeStatus = mapKanbanStatusToInitiative(newStatus);
+    const now = new Date().toISOString();
+
+    // Update status
+    initiative.status = initiativeStatus;
+
+    // Append to history
+    if (!initiative.history) {
+      initiative.history = [];
+    }
+    initiative.history.push({
+      status: initiativeStatus,
+      at: now,
+      by: 'mission-control',
+      note: `Updated via Kanban (${newStatus})`,
+    });
+
+    // Update lastUpdate timestamp
+    data.lastUpdate = now;
+
+    // Write back atomically
+    const tmpPath = initiativesPath + '.tmp';
+    fs.writeFileSync(tmpPath, JSON.stringify(data, null, 2), 'utf-8');
+    fs.renameSync(tmpPath, initiativesPath);
+
+    console.log(`[writeback] Updated initiative ${initiative.id} → ${initiativeStatus} (from kanban: ${newStatus})`);
+  } catch (err) {
+    // Non-fatal: log but don't fail the API request
+    console.error('[writeback] Failed to write back to INITIATIVES.json:', err);
   }
 }
 
@@ -99,11 +203,13 @@ export async function PATCH(
 
     // Track if we need to dispatch task
     let shouldDispatch = false;
+    let statusChanged = false;
 
     // Handle status change
     if (validatedData.status !== undefined && validatedData.status !== existing.status) {
       updates.push('status = ?');
       values.push(validatedData.status);
+      statusChanged = true;
 
       // Auto-dispatch when moving to assigned
       if (validatedData.status === 'assigned' && existing.assigned_agent_id) {
@@ -150,6 +256,11 @@ export async function PATCH(
     values.push(id);
 
     run(`UPDATE tasks SET ${updates.join(', ')} WHERE id = ?`, values);
+
+    // Writeback to INITIATIVES.json for squad workspace tasks
+    if (statusChanged && validatedData.status && existing.workspace_id === 'squad') {
+      writebackToInitiatives(id, existing.title, validatedData.status);
+    }
 
     // Fetch updated task with all joined fields
     const task = queryOne<Task>(

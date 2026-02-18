@@ -49,44 +49,31 @@ export function extractJSON(text: string): object | null {
 }
 
 /**
- * Get messages from OpenClaw API for a given session.
- * Returns assistant messages with text content extracted.
+ * Get messages from the in-memory planning buffer for a given session.
+ *
+ * Instead of calling `chat.history` (which the Gateway does not support for
+ * planning sessions and causes a 30-second timeout), we rely on the WebSocket
+ * event stream that is already being received by the singleton OpenClawClient.
+ *
+ * When a planning message is sent via `chat.send`, the Gateway processes it
+ * and streams the response back as `type:"event" event:"agent"` frames.
+ * The OpenClawClient now captures these into a `globalThis` buffer keyed by
+ * sessionKey.  This function reads from that buffer — no extra RPC call needed.
  */
 export async function getMessagesFromOpenClaw(
   sessionKey: string
 ): Promise<Array<{ role: string; content: string }>> {
   try {
     const client = getOpenClawClient();
+    // Ensure client is connected so it can receive streaming events.
     if (!client.isConnected()) {
       await client.connect();
     }
 
-    // Use chat.history API to get session messages
-    const result = await client.call<{
-      messages: Array<{
-        role: string;
-        content: Array<{ type: string; text?: string }>;
-      }>;
-    }>('chat.history', {
-      sessionKey,
-      limit: 50,
-    });
+    // Read from the in-memory planning buffer (populated by WebSocket events)
+    const buffered = client.getPlanningMessages(sessionKey);
 
-    const messages: Array<{ role: string; content: string }> = [];
-
-    for (const msg of result.messages || []) {
-      if (msg.role === 'assistant') {
-        const textContent = msg.content?.find((c) => c.type === 'text');
-        if (textContent?.text) {
-          messages.push({
-            role: 'assistant',
-            content: textContent.text,
-          });
-        }
-      }
-    }
-
-    return messages;
+    return buffered.map((m) => ({ role: m.role, content: m.content }));
   } catch (err) {
     console.error('[Planning Utils] Failed to get messages from OpenClaw:', err);
     return [];

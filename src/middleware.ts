@@ -1,5 +1,47 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+// ─── IP Allowlist (Tailscale-only access) ───────────────────────────────────
+// Only allow requests from Tailscale subnet (100.64.0.0/10) and localhost.
+// This acts as a software firewall since UFW/iptables are not available.
+
+const TAILSCALE_SUBNET_START = ip4ToInt('100.64.0.0');
+const TAILSCALE_SUBNET_END   = ip4ToInt('100.127.255.255'); // /10 = 100.64 - 100.127
+
+function ip4ToInt(ip: string): number {
+  return ip.split('.').reduce((acc, oct) => (acc << 8) | parseInt(oct, 10), 0) >>> 0;
+}
+
+function isAllowedIp(ip: string): boolean {
+  if (!ip) return false;
+  // Localhost IPv4 / IPv6
+  if (ip === '127.0.0.1' || ip === '::1' || ip === 'localhost') return true;
+  // Strip IPv6-mapped IPv4 prefix (::ffff:x.x.x.x)
+  const cleanIp = ip.replace(/^::ffff:/, '');
+  // Private ranges (container-to-container, Docker bridge)
+  if (cleanIp.startsWith('172.') || cleanIp.startsWith('10.') || cleanIp.startsWith('192.168.')) return true;
+  // Tailscale CGNAT range: 100.64.0.0/10
+  try {
+    const ipInt = ip4ToInt(cleanIp);
+    if (ipInt >= TAILSCALE_SUBNET_START && ipInt <= TAILSCALE_SUBNET_END) return true;
+  } catch {
+    // Not a valid IPv4 — may be IPv6 Tailscale (fd7a:115c::/48)
+    if (ip.startsWith('fd7a:115c:')) return true;
+  }
+  return false;
+}
+
+function getClientIp(request: NextRequest): string {
+  // Prefer CF-Connecting-IP or X-Forwarded-For (proxy/Tailscale serve)
+  const cfIp = request.headers.get('cf-connecting-ip');
+  if (cfIp) return cfIp.trim();
+  const xForwarded = request.headers.get('x-forwarded-for');
+  if (xForwarded) return xForwarded.split(',')[0].trim();
+  const xRealIp = request.headers.get('x-real-ip');
+  if (xRealIp) return xRealIp.trim();
+  // Fall back to NextRequest.ip (may be undefined in some environments)
+  return (request as unknown as { ip?: string }).ip || '';
+}
+
 // Log warning at startup if auth is disabled
 const MC_API_TOKEN = process.env.MC_API_TOKEN;
 if (!MC_API_TOKEN) {
@@ -56,7 +98,19 @@ if (DEMO_MODE) {
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Only protect /api/* routes
+  // ─── IP Allowlist check (applies to ALL routes) ───────────────────────────
+  // Block requests from non-Tailscale, non-localhost IPs.
+  // MC is intended to be accessible only via Tailscale.
+  const clientIp = getClientIp(request);
+  if (clientIp && !isAllowedIp(clientIp)) {
+    console.warn(`[SECURITY] Blocked request from non-Tailscale IP: ${clientIp} → ${pathname}`);
+    return new NextResponse('Access denied. Mission Control is accessible via Tailscale only.', {
+      status: 403,
+      headers: { 'Content-Type': 'text/plain' },
+    });
+  }
+
+  // Only protect /api/* routes with token auth
   if (!pathname.startsWith('/api/')) {
     // Add demo mode header for UI detection
     if (DEMO_MODE) {
@@ -121,5 +175,6 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: '/api/:path*',
+  // Apply IP allowlist to all routes; token auth only applies to /api/*
+  matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
 };

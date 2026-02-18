@@ -1,0 +1,256 @@
+#!/usr/bin/env node
+/**
+ * sync-from-json.js — Sync INITIATIVES.json + agent-*.json → SQLite
+ *
+ * Reads:
+ *   - /home/node/.openclaw/workspace/intel/status/INITIATIVES.json
+ *   - /home/node/.openclaw/workspace/intel/status/agent-*.json
+ *
+ * Writes to:
+ *   - /home/node/.openclaw/workspace/mission-control.db
+ *
+ * Run: node sync-from-json.js
+ * Cron: every 5 minutes
+ */
+
+'use strict';
+
+const path = require('path');
+const fs = require('fs');
+const Database = require('better-sqlite3');
+
+const WORKSPACE = '/home/node/.openclaw/workspace';
+const INTEL_STATUS = path.join(WORKSPACE, 'intel/status');
+const DB_PATH = path.join(WORKSPACE, 'mission-control.db');
+const INITIATIVES_FILE = path.join(INTEL_STATUS, 'INITIATIVES.json');
+
+// ─── Helpers ────────────────────────────────────────────────────────────────
+
+function readJSON(filePath) {
+  try {
+    return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+  } catch (e) {
+    console.warn(`[sync] Could not read ${filePath}: ${e.message}`);
+    return null;
+  }
+}
+
+function now() {
+  return new Date().toISOString();
+}
+
+// ─── Status mappers ──────────────────────────────────────────────────────────
+
+// Valid task statuses: pending_dispatch, planning, inbox, assigned,
+//                      in_progress, testing, review, done
+function mapInitiativeStatus(status) {
+  const map = {
+    'in-progress': 'in_progress',
+    'completed': 'done',
+    'canceled': 'done',      // closest available
+    'cancelled': 'done',
+    'blocked': 'in_progress', // keep visible
+    'pending': 'inbox',
+    'todo': 'inbox',
+  };
+  return map[status] || 'inbox';
+}
+
+function mapAgentStatus(status) {
+  const map = {
+    'working': 'working',
+    'idle': 'standby',
+    'standby': 'standby',
+    'blocked': 'standby',
+    'error': 'offline',
+    'offline': 'offline',
+  };
+  return map[status] || 'standby';
+}
+
+// ─── Sync initiatives → tasks table ─────────────────────────────────────────
+
+function syncInitiatives(db) {
+  const data = readJSON(INITIATIVES_FILE);
+  if (!data || !Array.isArray(data.initiatives)) {
+    console.warn('[sync] INITIATIVES.json missing or malformed');
+    return 0;
+  }
+
+  // Get the primary workspace_id
+  const workspace = db.prepare('SELECT id FROM workspaces LIMIT 1').get();
+  const workspace_id = workspace ? workspace.id : null;
+
+  const upsert = db.prepare(`
+    INSERT INTO tasks (id, title, status, description, workspace_id, created_at, updated_at)
+    VALUES (@id, @title, @status, @description, @workspace_id, @created_at, @updated_at)
+    ON CONFLICT(id) DO UPDATE SET
+      title       = excluded.title,
+      status      = excluded.status,
+      description = excluded.description,
+      updated_at  = excluded.updated_at
+  `);
+
+  const syncMany = db.transaction((initiatives) => {
+    let count = 0;
+    for (const init of initiatives) {
+      const id = `initiative-${init.id.toLowerCase()}`;
+      const title = `${init.id}: ${init.title}`;
+      const status = mapInitiativeStatus(init.status);
+
+      const descParts = [];
+      if (init.summary) descParts.push(init.summary);
+      if (init.lead) descParts.push(`Lead: ${init.lead}`);
+      if (init.participants?.length) descParts.push(`Participants: ${init.participants.join(', ')}`);
+      if (init.priority) descParts.push(`Priority: ${init.priority}`);
+      if (init.target) descParts.push(`Target: ${init.target}`);
+      const description = descParts.join('\n');
+
+      // Last history entry timestamp for created_at
+      const firstHistory = init.history?.[0];
+      const created_at = firstHistory?.at || init.created || now();
+
+      upsert.run({
+        id,
+        title,
+        status,
+        description,
+        workspace_id,
+        created_at,
+        updated_at: now(),
+      });
+      count++;
+    }
+    return count;
+  });
+
+  const count = syncMany(data.initiatives);
+  console.log(`[sync] Initiatives: ${count} upserted`);
+  return count;
+}
+
+// ─── Sync agent JSON files → agents table ───────────────────────────────────
+
+function syncAgents(db) {
+  const agentFiles = fs.readdirSync(INTEL_STATUS).filter(f =>
+    f.match(/^agent-(?!status-template).*\.json$/)
+  );
+
+  // Get the primary workspace_id
+  const workspace = db.prepare('SELECT id FROM workspaces LIMIT 1').get();
+  const workspace_id = workspace ? workspace.id : null;
+
+  // agents table columns: id, name, role, description, avatar_emoji, status,
+  //   is_master, workspace_id, soul_md, user_md, agents_md, model, created_at,
+  //   updated_at, system_id
+  const upsert = db.prepare(`
+    INSERT INTO agents (id, name, role, status, description, workspace_id, created_at, updated_at)
+    VALUES (@id, @name, @role, @status, @description, @workspace_id, @created_at, @updated_at)
+    ON CONFLICT(id) DO UPDATE SET
+      status      = excluded.status,
+      description = excluded.description,
+      updated_at  = excluded.updated_at
+  `);
+
+  const syncMany = db.transaction((files) => {
+    let count = 0;
+    for (const file of files) {
+      const agentData = readJSON(path.join(INTEL_STATUS, file));
+      if (!agentData) continue;
+
+      const agentId = agentData.agent ||
+        file.replace(/^agent-/, '').replace(/\.json$/, '');
+
+      // Build description from recent work / current task
+      const descParts = [];
+      if (agentData.currentTask) {
+        const ct = typeof agentData.currentTask === 'string'
+          ? agentData.currentTask
+          : JSON.stringify(agentData.currentTask);
+        descParts.push(`Current task: ${ct}`);
+      }
+      if (agentData.last_task_description) {
+        descParts.push(`Last task: ${agentData.last_task_description}`);
+      }
+      if (agentData.initiative) {
+        descParts.push(`Initiative: ${agentData.initiative}`);
+      }
+      if (agentData.blockers?.length) {
+        descParts.push(`Blockers: ${agentData.blockers.length}`);
+      }
+      const description = descParts.join(' | ');
+
+      upsert.run({
+        id: agentId,
+        name: agentData.name || agentId,
+        role: agentData.role || agentId, // role NOT NULL — use id as fallback
+        status: mapAgentStatus(agentData.status),
+        description,
+        workspace_id,
+        created_at: agentData.lastUpdate || now(),
+        updated_at: agentData.lastUpdate || now(),
+      });
+      count++;
+    }
+    return count;
+  });
+
+  const count = syncMany(agentFiles);
+  console.log(`[sync] Agents: ${count} upserted`);
+  return count;
+}
+
+// ─── Log sync event ──────────────────────────────────────────────────────────
+
+function logSyncEvent(db, initiativeCount, agentCount) {
+  try {
+    // events columns: id, type, agent_id, task_id, message, metadata, created_at
+    db.prepare(`
+      INSERT INTO events (type, message, metadata, created_at)
+      VALUES ('sync', @message, @metadata, @created_at)
+    `).run({
+      message: `JSON sync: ${initiativeCount} initiatives, ${agentCount} agents`,
+      metadata: JSON.stringify({
+        source: 'sync-from-json.js',
+        initiatives_synced: initiativeCount,
+        agents_synced: agentCount,
+      }),
+      created_at: now(),
+    });
+  } catch (e) {
+    // Non-fatal — events table schema may vary
+    console.warn(`[sync] Could not log event: ${e.message}`);
+  }
+}
+
+// ─── Entry point ─────────────────────────────────────────────────────────────
+
+function main() {
+  const start = Date.now();
+  console.log(`[sync] Starting at ${now()}`);
+
+  if (!fs.existsSync(DB_PATH)) {
+    console.error(`[sync] Database not found at ${DB_PATH}`);
+    process.exit(1);
+  }
+
+  const db = new Database(DB_PATH);
+  db.pragma('journal_mode = WAL');
+  db.pragma('foreign_keys = ON');
+
+  try {
+    const initCount = syncInitiatives(db);
+    const agentCount = syncAgents(db);
+    logSyncEvent(db, initCount, agentCount);
+
+    const elapsed = Date.now() - start;
+    console.log(`[sync] Complete in ${elapsed}ms — initiatives=${initCount} agents=${agentCount}`);
+  } catch (e) {
+    console.error(`[sync] Fatal error: ${e.message}`);
+    process.exit(1);
+  } finally {
+    db.close();
+  }
+}
+
+main();

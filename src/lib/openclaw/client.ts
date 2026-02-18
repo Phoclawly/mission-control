@@ -20,6 +20,35 @@ if (!(GLOBAL_EVENT_CACHE_KEY in globalThis)) {
 
 const globalProcessedEvents = (globalThis as unknown as Record<string, Map<string, number>>)[GLOBAL_EVENT_CACHE_KEY];
 
+// ─── Planning session response buffer ───────────────────────────────────────
+// Persists across module reloads in Next.js.  Keyed by sessionKey.
+// Each entry tracks the in-flight run and completed assistant messages.
+const GLOBAL_PLANNING_BUFFER_KEY = '__openclaw_planning_buffer__';
+
+interface PlanningRunState {
+  runId: string;
+  /** Accumulated full text for the current run (updated with each delta) */
+  currentText: string;
+  /** Whether the run finished (lifecycle end or chat done) */
+  done: boolean;
+}
+
+interface PlanningSessionBuffer {
+  /** Completed assistant messages, in order */
+  messages: Array<{ role: 'assistant'; content: string; timestamp: number }>;
+  /** Active run state (null when idle) */
+  activeRun: PlanningRunState | null;
+}
+
+if (!(GLOBAL_PLANNING_BUFFER_KEY in globalThis)) {
+  (globalThis as Record<string, unknown>)[GLOBAL_PLANNING_BUFFER_KEY] =
+    new Map<string, PlanningSessionBuffer>();
+}
+
+const globalPlanningBuffer = (
+  globalThis as unknown as Record<string, Map<string, PlanningSessionBuffer>>
+)[GLOBAL_PLANNING_BUFFER_KEY];
+
 export class OpenClawClient extends EventEmitter {
   private ws: WebSocket | null = null;
   private reconnectTimer: NodeJS.Timeout | null = null;
@@ -346,7 +375,7 @@ export class OpenClawClient extends EventEmitter {
     return this.connecting;
   }
 
-  private handleMessage(data: OpenClawMessage & { type?: string; ok?: boolean; payload?: unknown }): void {
+  private handleMessage(data: OpenClawMessage & { type?: string; ok?: boolean; payload?: unknown; event?: string; seq?: number }): void {
     // Handle OpenClaw ResponseFrame format (type: "res")
     if (data.type === 'res' && data.id !== undefined) {
       const requestId = data.id as string | number;
@@ -378,11 +407,121 @@ export class OpenClawClient extends EventEmitter {
       return;
     }
 
+    // Handle OpenClaw streaming events (type: "event")
+    // These come through for all sessions — we capture planning session responses here.
+    if (data.type === 'event') {
+      const payload = data.payload as Record<string, unknown> | undefined;
+      const sessionKey = payload?.sessionKey as string | undefined;
+
+      if (sessionKey && sessionKey.startsWith('agent:main:planning:')) {
+        this.capturePlanningEvent(sessionKey, data.event as string, payload!);
+      }
+
+      // Also emit for any other listeners
+      this.emit('oc:event', data.event, payload);
+      return;
+    }
+
     // Handle events/notifications
     if (data.method) {
       this.emit('notification', data);
       this.emit(data.method, data.params);
     }
+  }
+
+  /**
+   * Capture streaming events from a planning session into the global buffer.
+   *
+   * OpenClaw sends two event types per token:
+   *   • event="agent"  payload.stream="assistant"  payload.data.text = full accumulated text
+   *   • event="agent"  payload.stream="lifecycle"  payload.data.phase = "start"|"end"
+   *   • event="chat"   payload.state="delta"|"done"
+   *
+   * We use the "agent" + stream="assistant" events to accumulate text (data.text is the
+   * full text so far, not just the delta), and lifecycle "end" (or chat "done") to finalise.
+   */
+  private capturePlanningEvent(
+    sessionKey: string,
+    eventName: string | undefined,
+    payload: Record<string, unknown>,
+  ): void {
+    if (!globalPlanningBuffer.has(sessionKey)) {
+      globalPlanningBuffer.set(sessionKey, { messages: [], activeRun: null });
+    }
+    const buf = globalPlanningBuffer.get(sessionKey)!;
+    const runId = payload.runId as string | undefined;
+
+    if (eventName === 'agent') {
+      const stream = payload.stream as string | undefined;
+      const pdata = payload.data as Record<string, unknown> | undefined;
+
+      if (stream === 'assistant' && runId && pdata?.text) {
+        // Update or create the active run entry
+        if (!buf.activeRun || buf.activeRun.runId !== runId) {
+          buf.activeRun = { runId, currentText: pdata.text as string, done: false };
+        } else {
+          buf.activeRun.currentText = pdata.text as string;
+        }
+      } else if (stream === 'lifecycle' && pdata?.phase === 'end' && runId) {
+        // Run finished — finalise the message
+        if (buf.activeRun && buf.activeRun.runId === runId && buf.activeRun.currentText) {
+          buf.messages.push({
+            role: 'assistant',
+            content: buf.activeRun.currentText,
+            timestamp: Date.now(),
+          });
+          console.log(
+            `[OpenClaw] Planning session "${sessionKey}" received complete message (${buf.activeRun.currentText.length} chars)`,
+          );
+          buf.activeRun = null;
+        }
+      }
+    } else if (eventName === 'chat') {
+      const state = payload.state as string | undefined;
+
+      if (state === 'done' && runId) {
+        // "chat" done — if activeRun has text not yet committed, commit it now
+        if (buf.activeRun && buf.activeRun.runId === runId && buf.activeRun.currentText) {
+          buf.messages.push({
+            role: 'assistant',
+            content: buf.activeRun.currentText,
+            timestamp: Date.now(),
+          });
+          console.log(
+            `[OpenClaw] Planning session "${sessionKey}" chat done — message committed (${buf.activeRun.currentText.length} chars)`,
+          );
+          buf.activeRun = null;
+        }
+      } else if (state === 'delta') {
+        // delta — extract text from message content as fallback
+        const msg = payload.message as Record<string, unknown> | undefined;
+        const content = msg?.content as Array<{ type: string; text?: string }> | undefined;
+        const text = content?.find(c => c.type === 'text')?.text;
+        if (text && runId) {
+          if (!buf.activeRun || buf.activeRun.runId !== runId) {
+            buf.activeRun = { runId, currentText: text, done: false };
+          } else if (text.length > buf.activeRun.currentText.length) {
+            // Only update if we got more text (chat events are less granular)
+            buf.activeRun.currentText = text;
+          }
+        }
+      }
+    }
+  }
+
+  /**
+   * Get buffered planning session messages (assistant messages only).
+   * Returns messages captured via WebSocket streaming events.
+   */
+  getPlanningMessages(sessionKey: string): Array<{ role: 'assistant'; content: string; timestamp: number }> {
+    return globalPlanningBuffer.get(sessionKey)?.messages ?? [];
+  }
+
+  /**
+   * Clear the planning buffer for a session (e.g., after planning is complete).
+   */
+  clearPlanningBuffer(sessionKey: string): void {
+    globalPlanningBuffer.delete(sessionKey);
   }
 
   private scheduleReconnect(): void {

@@ -270,6 +270,12 @@ export async function GET(
             console.log('[Planning Poll] Planning complete, handling...');
             const { firstAgentId, parsed: fullParsed, dispatchError } = await handlePlanningCompletion(taskId, parsed, messages);
 
+            // Clear the in-memory planning buffer for this session (free memory)
+            try {
+              const client = getOpenClawClient();
+              client.clearPlanningBuffer(task.planning_session_key!);
+            } catch { /* non-critical */ }
+
             return NextResponse.json({
               hasUpdates: true,
               complete: true,

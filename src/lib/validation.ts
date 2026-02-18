@@ -29,11 +29,13 @@ export const CreateTaskSchema = z.object({
   description: z.string().max(10000, 'Description must be 10000 characters or less').optional(),
   status: TaskStatus.optional(),
   priority: TaskPriority.optional(),
-  assigned_agent_id: z.string().uuid().optional(),
-  created_by_agent_id: z.string().uuid().optional(),
+  // Accept empty string or null and convert to undefined (unassigned)
+  assigned_agent_id: z.union([z.string().uuid(), z.literal(''), z.null()]).optional().transform(v => (v === '' || v === null) ? undefined : v),
+  created_by_agent_id: z.union([z.string().uuid(), z.literal(''), z.null()]).optional().transform(v => (v === '' || v === null) ? undefined : v),
   business_id: z.string().optional(),
   workspace_id: z.string().optional(),
-  due_date: z.string().optional(),
+  // Accept null and convert to undefined
+  due_date: z.union([z.string(), z.null()]).optional().transform(v => v === null ? undefined : v),
 });
 
 export const UpdateTaskSchema = z.object({
@@ -41,9 +43,9 @@ export const UpdateTaskSchema = z.object({
   description: z.string().max(10000).optional(),
   status: TaskStatus.optional(),
   priority: TaskPriority.optional(),
-  assigned_agent_id: z.string().uuid().optional().nullable(),
-  due_date: z.string().optional().nullable(),
-  updated_by_agent_id: z.string().uuid().optional(),
+  assigned_agent_id: z.union([z.string().uuid(), z.literal(''), z.null()]).optional().transform(v => (v === '') ? null : v),
+  due_date: z.union([z.string(), z.null()]).optional(),
+  updated_by_agent_id: z.union([z.string().uuid(), z.literal(''), z.null()]).optional().transform(v => (v === '' || v === null) ? undefined : v),
 });
 
 // Activity validation schema

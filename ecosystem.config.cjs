@@ -15,6 +15,7 @@ module.exports = {
         DOTENV_CONFIG_PATH: '/home/node/.openclaw/repos/mission-control/.env.local'
       },
       // PM2 settings
+      exec_mode: 'fork',
       instances: 1,
       autorestart: true,
       max_restarts: 10,
@@ -36,6 +37,7 @@ module.exports = {
         SQUAD_STATUS_PATH: '/home/node/.openclaw/workspace/intel/status',
       },
       // Daemon settings
+      exec_mode: 'fork',
       instances: 1,
       autorestart: true,
       max_restarts: 5,

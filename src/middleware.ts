@@ -158,6 +158,11 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
+  // Allow localhost requests without auth (agent callbacks from same container)
+  if (clientIp === '127.0.0.1' || clientIp === '::1' || clientIp === '::ffff:127.0.0.1') {
+    return NextResponse.next();
+  }
+
   // Allow same-origin browser requests (UI fetching its own API)
   if (isSameOriginRequest(request)) {
     return NextResponse.next();

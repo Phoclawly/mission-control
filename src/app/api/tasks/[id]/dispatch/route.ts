@@ -156,18 +156,36 @@ ${task.due_date ? `**Due:** ${task.due_date}\n` : ''}
 **OUTPUT DIRECTORY:** ${taskProjectDir}
 Create this directory and save all deliverables there.
 
-**IMPORTANT:** After completing work, you MUST call these APIs:
-1. Log activity: POST ${missionControlUrl}/api/tasks/${task.id}/activities
-   Body: {"activity_type": "completed", "message": "Description of what was done"}
-2. Register deliverable: POST ${missionControlUrl}/api/tasks/${task.id}/deliverables
-   Body: {"deliverable_type": "file", "title": "File name", "path": "${taskProjectDir}/filename.html"}
-3. Update status: PATCH ${missionControlUrl}/api/tasks/${task.id}
-   Body: {"status": "review"}
+**MANDATORY POST-COMPLETION STEPS — Do ALL 3 in order using fetch_url or http tool:**
 
-When complete, reply with:
-\`TASK_COMPLETE: [brief summary of what you did]\`
+Step 1: Register EACH deliverable file (repeat for every file you created):
+\`\`\`
+POST ${missionControlUrl}/api/tasks/${task.id}/deliverables
+Content-Type: application/json
 
-If you need help or clarification, ask the orchestrator.`;
+{"deliverable_type": "file", "title": "<filename>", "path": "<full_path_to_file>"}
+\`\`\`
+
+Step 2: Log completion activity:
+\`\`\`
+POST ${missionControlUrl}/api/tasks/${task.id}/activities
+Content-Type: application/json
+
+{"activity_type": "completed", "message": "<summary of what was done>"}
+\`\`\`
+
+Step 3: Move task to review (human will approve):
+\`\`\`
+PATCH ${missionControlUrl}/api/tasks/${task.id}
+Content-Type: application/json
+
+{"status": "review"}
+\`\`\`
+
+Do NOT skip any step. Do NOT set status to "done" — only "review". The human reviews and approves.
+
+When all 3 API calls succeed, reply with:
+\`TASK_COMPLETE: [brief summary]\``;
 
     const overrideMessage = typeof body.override_message === 'string' ? body.override_message.trim() : '';
     const taskMessage = overrideMessage || defaultTaskMessage;

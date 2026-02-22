@@ -62,7 +62,7 @@ export function extractJSON(text: string): object | null {
  */
 export async function getMessagesFromOpenClaw(
   sessionKey: string
-): Promise<Array<{ role: string; content: string }>> {
+): Promise<Array<{ role: string; content: string; timestamp?: number }>> {
   try {
     const client = getOpenClawClient();
     // Ensure client is connected so it can receive streaming events.
@@ -73,7 +73,7 @@ export async function getMessagesFromOpenClaw(
     // Read from the in-memory planning buffer (populated by WebSocket events)
     const buffered = client.getPlanningMessages(sessionKey);
 
-    return buffered.map((m) => ({ role: m.role, content: m.content }));
+    return buffered.map((m) => ({ role: m.role, content: m.content, timestamp: m.timestamp }));
   } catch (err) {
     console.error('[Planning Utils] Failed to get messages from OpenClaw:', err);
     return [];

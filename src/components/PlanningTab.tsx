@@ -112,6 +112,9 @@ export function PlanningTab({ taskId, onSpecLocked }: PlanningTabProps) {
         const data = await res.json();
 
         if (data.hasUpdates) {
+          // Clear any timeout warning/error once we get a real update
+          setError(null);
+
           setState(prev => ({
             ...prev!,
             messages: data.messages,
@@ -168,11 +171,10 @@ export function PlanningTab({ taskId, onSpecLocked }: PlanningTabProps) {
       pollForUpdates();
     }, 2000);
 
-    // Set a 30-second timeout - if no response, show error
-    // Don't clear selection - user can retry with same selection
+    // After 30 seconds, show a warning but keep polling.
+    // Some planning turns can legitimately take longer than 30s.
     pollingTimeoutRef.current = setTimeout(() => {
-      stopPolling();
-      setError('The orchestrator is taking too long to respond. Please try submitting again or refresh the page.');
+      setError('The orchestrator is taking longer than expected. Still waiting for response...');
     }, 30000);
   }, [pollForUpdates, stopPolling]);
 

@@ -217,19 +217,53 @@ export async function GET(
     }
 
     const messages = task.planning_messages ? JSON.parse(task.planning_messages) : [];
-    // Count only assistant messages for comparison, since OpenClaw only returns assistant messages
-    const initialAssistantCount = messages.filter((m: any) => m.role === 'assistant').length;
+    const existingAssistantMessages = messages.filter((m: any) => m.role === 'assistant');
 
-    console.log('[Planning Poll] Task', taskId, 'has', messages.length, 'total messages,', initialAssistantCount, 'assistant messages');
+    // Build set of existing assistant message signatures.
+    // This handles process restarts where in-memory OpenClaw buffer starts from zero.
+    const existingAssistantSignatures = new Set<string>();
+    for (const msg of existingAssistantMessages) {
+      const content = (msg.content || '').trim();
+      const sig = `${content.length}:${content.slice(0, 120)}`;
+      existingAssistantSignatures.add(sig);
+    }
+
+    console.log('[Planning Poll] Task', taskId, 'has', messages.length, 'total messages,', existingAssistantMessages.length, 'assistant messages');
 
     // Check OpenClaw for new messages (lightweight check, not a loop)
     const openclawMessages = await getMessagesFromOpenClaw(task.planning_session_key);
 
-    console.log('[Planning Poll] Comparison: stored_assistant=', initialAssistantCount, 'openclaw_assistant=', openclawMessages.length);
+    const newMessages = openclawMessages.filter((msg) => {
+      if (msg.role !== 'assistant') return false;
 
-    if (openclawMessages.length > initialAssistantCount) {
+      // If timestamp exists and predates latest stored assistant timestamp,
+      // this is likely replayed pre-restart data and should be ignored.
+      if (
+        typeof (msg as { timestamp?: number }).timestamp === 'number' &&
+        existingAssistantMessages.length > 0
+      ) {
+        const latestStoredAssistantTs = Math.max(
+          ...existingAssistantMessages
+            .map((m: any) => (typeof m.timestamp === 'number' ? m.timestamp : 0))
+        );
+        if ((msg as { timestamp?: number }).timestamp! <= latestStoredAssistantTs) {
+          return false;
+        }
+      }
+
+      const content = (msg.content || '').trim();
+      const sig = `${content.length}:${content.slice(0, 120)}`;
+      return !existingAssistantSignatures.has(sig);
+    });
+
+    console.log(
+      '[Planning Poll] Comparison: stored_assistant=', existingAssistantMessages.length,
+      'openclaw_assistant=', openclawMessages.length,
+      'new_assistant=', newMessages.length,
+    );
+
+    if (newMessages.length > 0) {
       let currentQuestion = null;
-      const newMessages = openclawMessages.slice(initialAssistantCount);
       console.log('[Planning Poll] Processing', newMessages.length, 'new messages');
 
       // Find new assistant messages

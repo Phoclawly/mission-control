@@ -3,11 +3,11 @@
  * sync-from-json.js — Sync INITIATIVES.json + agent-*.json → SQLite
  *
  * Reads:
- *   - /home/node/.openclaw/workspace/intel/status/INITIATIVES.json
- *   - /home/node/.openclaw/workspace/intel/status/agent-*.json
+ *   - $SQUAD_STATUS_PATH/INITIATIVES.json
+ *   - $SQUAD_STATUS_PATH/agent-*.json
  *
  * Writes to:
- *   - /home/node/.openclaw/workspace/mission-control.db
+ *   - $DATABASE_PATH (or $WORKSPACE_BASE_PATH/mission-control.db)
  *
  * Run: node sync-from-json.js
  * Cron: every 5 minutes
@@ -19,9 +19,9 @@ const path = require('path');
 const fs = require('fs');
 const Database = require('better-sqlite3');
 
-const WORKSPACE = '/home/node/.openclaw/workspace';
-const INTEL_STATUS = path.join(WORKSPACE, 'intel/status');
-const DB_PATH = path.join(WORKSPACE, 'mission-control.db');
+const WORKSPACE = process.env.WORKSPACE_BASE_PATH || '/home/node/.openclaw/workspace';
+const INTEL_STATUS = process.env.SQUAD_STATUS_PATH || path.join(WORKSPACE, 'intel/status');
+const DB_PATH = process.env.DATABASE_PATH || path.join(WORKSPACE, 'mission-control.db');
 const INITIATIVES_FILE = path.join(INTEL_STATUS, 'INITIATIVES.json');
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -82,13 +82,24 @@ function syncInitiatives(db) {
   const workspace_id = workspace ? workspace.id : null;
 
   const upsert = db.prepare(`
-    INSERT INTO tasks (id, title, status, description, workspace_id, created_at, updated_at)
-    VALUES (@id, @title, @status, @description, @workspace_id, @created_at, @updated_at)
+    INSERT INTO tasks (
+      id, title, status, description, workspace_id,
+      initiative_id, external_request_id, source,
+      created_at, updated_at
+    )
+    VALUES (
+      @id, @title, @status, @description, @workspace_id,
+      @initiative_id, @external_request_id, @source,
+      @created_at, @updated_at
+    )
     ON CONFLICT(id) DO UPDATE SET
-      title       = excluded.title,
-      status      = excluded.status,
-      description = excluded.description,
-      updated_at  = excluded.updated_at
+      title               = excluded.title,
+      status              = excluded.status,
+      description         = excluded.description,
+      initiative_id       = excluded.initiative_id,
+      external_request_id = excluded.external_request_id,
+      source              = excluded.source,
+      updated_at          = excluded.updated_at
   `);
 
   const syncMany = db.transaction((initiatives) => {
@@ -116,6 +127,9 @@ function syncInitiatives(db) {
         status,
         description,
         workspace_id,
+        initiative_id: init.id || null,
+        external_request_id: `initiative:${init.id || id}`,
+        source: init.source || 'sync-from-json',
         created_at,
         updated_at: now(),
       });

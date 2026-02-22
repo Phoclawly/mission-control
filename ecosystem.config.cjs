@@ -9,6 +9,8 @@ module.exports = {
         NODE_ENV: 'production',
         PORT: '4040',
         HOSTNAME: '0.0.0.0',
+        // Keep MISSION_CONTROL_URL aligned with exposed host/port for smoke checks
+        MISSION_CONTROL_URL: 'http://127.0.0.1:4040',
         // Force load .env.local
         DOTENV_CONFIG_PATH: '/home/node/.openclaw/repos/mission-control/.env.local'
       },
@@ -28,6 +30,11 @@ module.exports = {
       name: 'mc-sync-daemon',
       script: 'scripts/sync-daemon.js',
       cwd: '/home/node/.openclaw/repos/mission-control',
+      env: {
+        DATABASE_PATH: '/home/node/.openclaw/repos/mission-control/mission-control.db',
+        WORKSPACE_BASE_PATH: '/home/node/.openclaw/workspace',
+        SQUAD_STATUS_PATH: '/home/node/.openclaw/workspace/intel/status',
+      },
       // Daemon settings
       instances: 1,
       autorestart: true,

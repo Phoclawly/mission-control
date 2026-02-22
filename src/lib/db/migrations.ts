@@ -181,6 +181,60 @@ const migrations: Migration[] = [
         console.log('[Migration 006] Added planning_dispatch_error to tasks');
       }
     }
+  },
+  {
+    id: '007',
+    name: 'add_mission_control_initiative_contract_fields',
+    up: (db) => {
+      console.log('[Migration 007] Adding initiative contract fields to tasks...');
+
+      const tasksInfo = db.prepare("PRAGMA table_info(tasks)").all() as { name: string }[];
+
+      if (!tasksInfo.some(col => col.name === 'initiative_id')) {
+        db.exec(`ALTER TABLE tasks ADD COLUMN initiative_id TEXT`);
+        console.log('[Migration 007] Added initiative_id to tasks');
+      }
+
+      if (!tasksInfo.some(col => col.name === 'external_request_id')) {
+        db.exec(`ALTER TABLE tasks ADD COLUMN external_request_id TEXT`);
+        console.log('[Migration 007] Added external_request_id to tasks');
+      }
+
+      if (!tasksInfo.some(col => col.name === 'source')) {
+        db.exec(`ALTER TABLE tasks ADD COLUMN source TEXT DEFAULT 'mission-control'`);
+        console.log('[Migration 007] Added source to tasks');
+      }
+
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_tasks_initiative_id ON tasks(initiative_id)`);
+      db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_tasks_source_external_request_id ON tasks(source, external_request_id) WHERE external_request_id IS NOT NULL`);
+    }
+  },
+  {
+    id: '008',
+    name: 'repair_tasks_initiative_contract_columns',
+    up: (db) => {
+      console.log('[Migration 008] Repairing initiative contract fields on tasks if missing...');
+
+      const tasksInfo = db.prepare("PRAGMA table_info(tasks)").all() as { name: string }[];
+
+      if (!tasksInfo.some(col => col.name === 'initiative_id')) {
+        db.exec(`ALTER TABLE tasks ADD COLUMN initiative_id TEXT`);
+        console.log('[Migration 008] Added missing initiative_id to tasks');
+      }
+
+      if (!tasksInfo.some(col => col.name === 'external_request_id')) {
+        db.exec(`ALTER TABLE tasks ADD COLUMN external_request_id TEXT`);
+        console.log('[Migration 008] Added missing external_request_id to tasks');
+      }
+
+      if (!tasksInfo.some(col => col.name === 'source')) {
+        db.exec(`ALTER TABLE tasks ADD COLUMN source TEXT DEFAULT 'mission-control'`);
+        console.log('[Migration 008] Added missing source to tasks');
+      }
+
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_tasks_initiative_id ON tasks(initiative_id)`);
+      db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_tasks_source_external_request_id ON tasks(source, external_request_id) WHERE external_request_id IS NOT NULL`);
+    }
   }
 ];
 

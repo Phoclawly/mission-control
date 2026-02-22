@@ -180,6 +180,24 @@ npm run build
 npm start
 ```
 
+### Post-Deploy Smoke Check
+
+Run an automated smoke check after startup:
+
+```bash
+npm run smoke
+```
+
+The script validates:
+- `GET /` responds successfully
+- `GET /api/openclaw/status` responds and returns `connected: true`
+
+Optional overrides:
+
+```bash
+MISSION_CONTROL_URL=http://127.0.0.1:4040 MC_SMOKE_TIMEOUT_MS=15000 npm run smoke
+```
+
 ### Environment Variables for Production
 
 Create `.env.production.local`:

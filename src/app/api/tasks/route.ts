@@ -4,6 +4,8 @@ import { queryAll, queryOne, run } from '@/lib/db';
 import { broadcast } from '@/lib/events';
 import { CreateTaskSchema } from '@/lib/validation';
 import type { Task, CreateTaskRequest, Agent } from '@/lib/types';
+import fs from 'fs';
+import path from 'path';
 
 // GET /api/tasks - List all tasks with optional filters
 export async function GET(request: NextRequest) {
@@ -76,6 +78,72 @@ export async function GET(request: NextRequest) {
 
 // POST /api/tasks - Create a new task
 export async function POST(request: NextRequest) {
+  const hasTaskMetadataColumns = (): boolean => {
+    try {
+      const columns = queryAll<{ name: string }>('PRAGMA table_info(tasks)');
+      const names = new Set(columns.map(c => c.name));
+      return (
+        names.has('initiative_id') &&
+        names.has('external_request_id') &&
+        names.has('source')
+      );
+    } catch {
+      return false;
+    }
+  };
+
+  const appendPlannedInitiative = (initiativeId: string, title: string, externalRequestId?: string) => {
+    try {
+      const squadStatusPath = process.env.SQUAD_STATUS_PATH || '/home/node/.openclaw/workspace/intel/status';
+      const initiativesPath = path.join(squadStatusPath, 'INITIATIVES.json');
+      const now = new Date().toISOString();
+      let data: { lastUpdate?: string; initiatives?: Array<Record<string, unknown>> } = { initiatives: [] };
+
+      if (fs.existsSync(initiativesPath)) {
+        data = JSON.parse(fs.readFileSync(initiativesPath, 'utf-8'));
+      }
+      if (!Array.isArray(data.initiatives)) {
+        data.initiatives = [];
+      }
+
+      const existing = data.initiatives.find((init) => {
+        const initId = String((init as { id?: unknown }).id || '').toUpperCase();
+        const reqId = (init as { external_request_id?: unknown }).external_request_id;
+        return initId === initiativeId || (externalRequestId && reqId === externalRequestId);
+      });
+
+      if (!existing) {
+        data.initiatives.push({
+          id: initiativeId,
+          title,
+          status: 'planned',
+          lead: 'ventanal',
+          participants: ['ventanal'],
+          priority: 'high',
+          created: now.split('T')[0],
+          target: 'TBD',
+          summary: title,
+          source: 'mission-control',
+          external_request_id: externalRequestId || null,
+          history: [
+            {
+              status: 'planned',
+              at: now,
+              by: 'mission-control',
+              note: 'Created from Mission Control panel',
+            },
+          ],
+        });
+        data.lastUpdate = now;
+        const tmpPath = `${initiativesPath}.tmp`;
+        fs.writeFileSync(tmpPath, JSON.stringify(data, null, 2), 'utf-8');
+        fs.renameSync(tmpPath, initiativesPath);
+      }
+    } catch (err) {
+      console.warn('[POST /api/tasks] INITIATIVES planned append failed:', err);
+    }
+  };
+
   try {
     const body: CreateTaskRequest = await request.json();
     console.log('[POST /api/tasks] Received body:', JSON.stringify(body));
@@ -91,8 +159,23 @@ export async function POST(request: NextRequest) {
 
     const validatedData = validation.data;
 
-    const id = uuidv4();
     const now = new Date().toISOString();
+    const source = validatedData.source || 'mission-control';
+
+    const taskMetadataColumnsReady = hasTaskMetadataColumns();
+
+    // Idempotent create for panel-originated requests
+    if (validatedData.external_request_id && taskMetadataColumnsReady) {
+      const existingByRequest = queryOne<Task>(
+        'SELECT * FROM tasks WHERE source = ? AND external_request_id = ?',
+        [source, validatedData.external_request_id]
+      );
+      if (existingByRequest) {
+        return NextResponse.json(existingByRequest);
+      }
+    }
+
+    const id = uuidv4();
 
     // Resolve workspace_id: use provided value, fall back to first available workspace
     let workspaceId = validatedData.workspace_id;
@@ -101,25 +184,75 @@ export async function POST(request: NextRequest) {
       workspaceId = defaultWorkspace?.id || 'default';
     }
     const status = validatedData.status || 'inbox';
-    
-    run(
-      `INSERT INTO tasks (id, title, description, status, priority, assigned_agent_id, created_by_agent_id, workspace_id, business_id, due_date, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        id,
+
+    try {
+      if (taskMetadataColumnsReady) {
+        run(
+          `INSERT INTO tasks (id, title, description, status, priority, assigned_agent_id, created_by_agent_id, workspace_id, business_id, due_date, initiative_id, external_request_id, source, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            id,
+            validatedData.title,
+            validatedData.description || null,
+            status,
+            validatedData.priority || 'normal',
+            validatedData.assigned_agent_id || null,
+            validatedData.created_by_agent_id || null,
+            workspaceId,
+            validatedData.business_id || 'default',
+            validatedData.due_date || null,
+            validatedData.initiative_id || null,
+            validatedData.external_request_id || null,
+            source,
+            now,
+            now,
+          ]
+        );
+      } else {
+        run(
+          `INSERT INTO tasks (id, title, description, status, priority, assigned_agent_id, created_by_agent_id, workspace_id, business_id, due_date, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            id,
+            validatedData.title,
+            validatedData.description || null,
+            status,
+            validatedData.priority || 'normal',
+            validatedData.assigned_agent_id || null,
+            validatedData.created_by_agent_id || null,
+            workspaceId,
+            validatedData.business_id || 'default',
+            validatedData.due_date || null,
+            now,
+            now,
+          ]
+        );
+      }
+    } catch (err) {
+      if (
+        taskMetadataColumnsReady &&
+        err instanceof Error &&
+        err.message.includes('UNIQUE constraint failed: tasks.source, tasks.external_request_id')
+      ) {
+        const existingByRequest = queryOne<Task>(
+          'SELECT * FROM tasks WHERE source = ? AND external_request_id = ?',
+          [source, validatedData.external_request_id]
+        );
+        if (existingByRequest) {
+          return NextResponse.json(existingByRequest);
+        }
+        return NextResponse.json({ error: 'Duplicate external_request_id for this source' }, { status: 409 });
+      }
+      throw err;
+    }
+
+    if (validatedData.initiative_id) {
+      appendPlannedInitiative(
+        validatedData.initiative_id,
         validatedData.title,
-        validatedData.description || null,
-        status,
-        validatedData.priority || 'normal',
-        validatedData.assigned_agent_id || null,
-        validatedData.created_by_agent_id || null,
-        workspaceId,
-        validatedData.business_id || 'default',
-        validatedData.due_date || null,
-        now,
-        now,
-      ]
-    );
+        validatedData.external_request_id
+      );
+    }
 
     // Log event
     let eventMessage = `New task: ${validatedData.title}`;
@@ -131,10 +264,42 @@ export async function POST(request: NextRequest) {
     }
 
     run(
-      `INSERT INTO events (id, type, agent_id, task_id, message, created_at)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [uuidv4(), 'task_created', body.created_by_agent_id || null, id, eventMessage, now]
+      `INSERT INTO events (id, type, agent_id, task_id, message, metadata, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [
+        uuidv4(),
+        'task_created',
+        body.created_by_agent_id || null,
+        id,
+        eventMessage,
+        JSON.stringify({
+          source,
+          initiative_id: validatedData.initiative_id || null,
+          external_request_id: validatedData.external_request_id || null,
+        }),
+        now,
+      ]
     );
+
+    if (validatedData.initiative_id) {
+      run(
+        `INSERT INTO events (id, type, task_id, message, metadata, created_at)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [
+          uuidv4(),
+          'task_status_changed',
+          id,
+          `Initiative ${validatedData.initiative_id} created as planned from panel`,
+          JSON.stringify({
+            source,
+            initiative_id: validatedData.initiative_id,
+            external_request_id: validatedData.external_request_id || null,
+            next_status: 'planned',
+          }),
+          now,
+        ]
+      );
+    }
 
     // Fetch created task with all joined fields
     const task = queryOne<Task>(

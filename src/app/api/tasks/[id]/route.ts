@@ -41,12 +41,13 @@ export async function GET(
  */
 function mapKanbanStatusToInitiative(kanbanStatus: string): string {
   switch (kanbanStatus) {
+    case 'planning':
+      return 'planned';
     case 'done':
     case 'completed':
       return 'completed';
     case 'cancelled':
       return 'canceled';
-    case 'planning':
     case 'in_progress':
     case 'review':
     case 'inbox':
@@ -61,7 +62,7 @@ function mapKanbanStatusToInitiative(kanbanStatus: string): string {
  * Write status change back to INITIATIVES.json for squad workspace tasks
  * Task IDs follow pattern "initiative-init-XXX" → maps to INIT-XXX in INITIATIVES.json
  */
-function writebackToInitiatives(taskId: string, taskTitle: string, newStatus: string): void {
+function writebackToInitiatives(taskId: string, taskTitle: string, newStatus: string, initiativeId?: string | null): void {
   try {
     const squadStatusPath = process.env.SQUAD_STATUS_PATH || '/home/node/.openclaw/workspace/intel/status';
     const initiativesPath = path.join(squadStatusPath, 'INITIATIVES.json');
@@ -79,17 +80,19 @@ function writebackToInitiatives(taskId: string, taskTitle: string, newStatus: st
       return;
     }
 
-    // Extract initiative ID from task ID: "initiative-init-007" → "INIT-007"
-    let initiativeId: string | null = null;
-    const idMatch = taskId.match(/^initiative-(init-\d+)$/i);
-    if (idMatch) {
-      initiativeId = idMatch[1].toUpperCase(); // e.g. "INIT-007"
+    // Resolve initiative ID from explicit field first, then task-id pattern fallback
+    let resolvedInitiativeId: string | null = initiativeId?.toUpperCase() || null;
+    if (!resolvedInitiativeId) {
+      const idMatch = taskId.match(/^initiative-(init-\d+)$/i);
+      if (idMatch) {
+        resolvedInitiativeId = idMatch[1].toUpperCase(); // e.g. "INIT-007"
+      }
     }
 
     // Find initiative by ID or by title prefix
     let initiative = null;
-    if (initiativeId) {
-      initiative = data.initiatives.find((init: { id?: string }) => init.id === initiativeId);
+    if (resolvedInitiativeId) {
+      initiative = data.initiatives.find((init: { id?: string }) => init.id === resolvedInitiativeId);
     }
 
     // Fallback: match by title (task title starts with "INIT-XXX: ...")
@@ -200,6 +203,18 @@ export async function PATCH(
       updates.push('due_date = ?');
       values.push(validatedData.due_date);
     }
+    if (validatedData.initiative_id !== undefined) {
+      updates.push('initiative_id = ?');
+      values.push(validatedData.initiative_id);
+    }
+    if (validatedData.external_request_id !== undefined) {
+      updates.push('external_request_id = ?');
+      values.push(validatedData.external_request_id);
+    }
+    if (validatedData.source !== undefined) {
+      updates.push('source = ?');
+      values.push(validatedData.source);
+    }
 
     // Track if we need to dispatch task
     let shouldDispatch = false;
@@ -255,11 +270,24 @@ export async function PATCH(
     values.push(now);
     values.push(id);
 
-    run(`UPDATE tasks SET ${updates.join(', ')} WHERE id = ?`, values);
+    try {
+      run(`UPDATE tasks SET ${updates.join(', ')} WHERE id = ?`, values);
+    } catch (err) {
+      if (
+        err instanceof Error &&
+        err.message.includes('UNIQUE constraint failed: tasks.source, tasks.external_request_id')
+      ) {
+        return NextResponse.json(
+          { error: 'Duplicate external_request_id for this source' },
+          { status: 409 }
+        );
+      }
+      throw err;
+    }
 
     // Writeback to INITIATIVES.json for squad workspace tasks
     if (statusChanged && validatedData.status && existing.workspace_id === 'squad') {
-      writebackToInitiatives(id, existing.title, validatedData.status);
+      writebackToInitiatives(id, existing.title, validatedData.status, validatedData.initiative_id || existing.initiative_id || null);
     }
 
     // Fetch updated task with all joined fields

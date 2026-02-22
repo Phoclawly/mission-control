@@ -124,6 +124,7 @@ export function WorkspaceDashboard() {
 function WorkspaceCard({ workspace, onDelete }: { workspace: WorkspaceStats; onDelete: (id: string) => void }) {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [activating, setActivating] = useState(false);
 
   const handleDelete = async (e: React.MouseEvent) => {
     e.preventDefault();
@@ -144,6 +145,33 @@ function WorkspaceCard({ workspace, onDelete }: { workspace: WorkspaceStats; onD
       setShowDeleteConfirm(false);
     }
   };
+
+  const handleActivateWorkspace = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setActivating(true);
+    try {
+      const requestId = crypto.randomUUID();
+      const activateRes = await fetch('/api/workspaces/activate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          workspace: workspace.slug,
+          agent_id: workspace.slug,
+          source: 'mission-control',
+          external_request_id: requestId,
+        }),
+      });
+      if (!activateRes.ok) {
+        const errorBody = await activateRes.json().catch(() => ({ error: 'Failed to activate workspace' }));
+        alert(errorBody.error || 'Failed to activate workspace');
+      }
+    } catch {
+      alert('Failed to activate workspace');
+    } finally {
+      setActivating(false);
+    }
+  };
   
   return (
     <>
@@ -160,6 +188,14 @@ function WorkspaceCard({ workspace, onDelete }: { workspace: WorkspaceStats; onD
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <button
+              onClick={handleActivateWorkspace}
+              disabled={activating}
+              className="px-2 py-1 text-xs rounded bg-mc-accent/20 text-mc-accent hover:bg-mc-accent/30 disabled:opacity-50"
+              title="Activate workspace"
+            >
+              {activating ? 'Activating...' : 'Activate'}
+            </button>
             {workspace.id !== 'default' && (
               <button
                 onClick={(e) => {

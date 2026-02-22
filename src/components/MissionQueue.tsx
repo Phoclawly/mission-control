@@ -102,13 +102,48 @@ export function MissionQueue({ workspaceId }: MissionQueueProps) {
           <ChevronRight className="w-4 h-4 text-mc-text-secondary" />
           <span className="text-sm font-medium uppercase tracking-wider">Mission Queue</span>
         </div>
-        <button
-          onClick={() => setShowCreateModal(true)}
-          className="flex items-center gap-2 px-3 py-1.5 bg-mc-accent-pink text-mc-bg rounded text-sm font-medium hover:bg-mc-accent-pink/90"
-        >
-          <Plus className="w-4 h-4" />
-          New Task
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={async () => {
+              const requestId = crypto.randomUUID();
+              const now = new Date().toISOString();
+              const initiativeId = `INIT-${now.slice(11, 19).replace(/:/g, '')}`;
+              const res = await fetch('/api/tasks', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  title: `${initiativeId} Ventanal demo`,
+                  description: 'Initiative created from Mission Control panel',
+                  status: 'planning',
+                  priority: 'high',
+                  workspace_id: workspaceId || 'squad',
+                  assigned_agent_id: 'ventanal',
+                  initiative_id: initiativeId,
+                  external_request_id: requestId,
+                  source: 'mission-control',
+                }),
+              });
+              if (res.ok) {
+                const created = await res.json();
+                useMissionControl.getState().addTask(created);
+              } else {
+                const err = await res.json().catch(() => ({ error: 'Failed to create initiative' }));
+                console.error('[MissionQueue] Create Initiative failed:', err.error || err);
+              }
+            }}
+            className="flex items-center gap-2 px-3 py-1.5 bg-mc-accent-cyan text-mc-bg rounded text-sm font-medium hover:bg-mc-accent-cyan/90"
+          >
+            <Plus className="w-4 h-4" />
+            Create Initiative
+          </button>
+          <button
+            onClick={() => setShowCreateModal(true)}
+            className="flex items-center gap-2 px-3 py-1.5 bg-mc-accent-pink text-mc-bg rounded text-sm font-medium hover:bg-mc-accent-pink/90"
+          >
+            <Plus className="w-4 h-4" />
+            New Task
+          </button>
+        </div>
       </div>
 
       {/* Kanban Columns */}

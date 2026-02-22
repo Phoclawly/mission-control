@@ -8,15 +8,33 @@ const TAILSCALE_SUBNET_START = ip4ToInt('100.64.0.0');
 const TAILSCALE_SUBNET_END   = ip4ToInt('100.127.255.255'); // /10 = 100.64 - 100.127
 
 function ip4ToInt(ip: string): number {
-  return ip.split('.').reduce((acc, oct) => (acc << 8) | parseInt(oct, 10), 0) >>> 0;
+  const octets = ip.split('.');
+  if (octets.length !== 4) {
+    throw new Error('Not an IPv4 address');
+  }
+
+  return octets.reduce((acc, oct) => {
+    if (!/^\d+$/.test(oct)) {
+      throw new Error('Invalid IPv4 octet');
+    }
+
+    const value = Number(oct);
+    if (value < 0 || value > 255) {
+      throw new Error('IPv4 octet out of range');
+    }
+
+    return (acc << 8) | value;
+  }, 0) >>> 0;
 }
 
 function isAllowedIp(ip: string): boolean {
   if (!ip) return false;
-  // Localhost IPv4 / IPv6
-  if (ip === '127.0.0.1' || ip === '::1' || ip === 'localhost') return true;
   // Strip IPv6-mapped IPv4 prefix (::ffff:x.x.x.x)
   const cleanIp = ip.replace(/^::ffff:/, '');
+
+  // Localhost IPv4 / IPv6 (including IPv6-mapped IPv4 localhost)
+  if (ip === '127.0.0.1' || ip === '::1' || ip === 'localhost' || cleanIp === '127.0.0.1') return true;
+
   // Private ranges (container-to-container, Docker bridge)
   if (cleanIp.startsWith('172.') || cleanIp.startsWith('10.') || cleanIp.startsWith('192.168.')) return true;
   // Tailscale CGNAT range: 100.64.0.0/10

@@ -2,7 +2,7 @@
 
 export type AgentStatus = 'standby' | 'working' | 'offline';
 
-export type TaskStatus = 'planning' | 'inbox' | 'assigned' | 'in_progress' | 'testing' | 'review' | 'done';
+export type TaskStatus = 'pending_dispatch' | 'planning' | 'inbox' | 'assigned' | 'in_progress' | 'testing' | 'review' | 'done';
 
 export type TaskPriority = 'low' | 'normal' | 'high' | 'urgent';
 
@@ -48,6 +48,9 @@ export interface Task {
   workspace_id: string;
   business_id: string;
   due_date?: string;
+  initiative_id?: string;
+  external_request_id?: string;
+  source?: string;
   created_at: string;
   updated_at: string;
   // Joined fields
@@ -115,6 +118,7 @@ export interface WorkspaceStats {
   slug: string;
   icon: string;
   taskCounts: {
+    pending_dispatch: number;
     planning: number;
     inbox: number;
     assigned: number;
@@ -241,7 +245,11 @@ export interface CreateTaskRequest {
   assigned_agent_id?: string;
   created_by_agent_id?: string;
   business_id?: string;
+  workspace_id?: string;
   due_date?: string;
+  initiative_id?: string;
+  external_request_id?: string;
+  source?: string;
 }
 
 export interface UpdateTaskRequest extends Partial<CreateTaskRequest> {

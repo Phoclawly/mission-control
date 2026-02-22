@@ -56,6 +56,7 @@ export function TaskModal({ task, onClose, workspaceId }: TaskModalProps) {
         assigned_agent_id: form.assigned_agent_id || null,
         due_date: form.due_date || null,
         workspace_id: workspaceId || task?.workspace_id || 'default',
+        source: task?.source || 'mission-control',
       };
 
       const res = await fetch(url, {

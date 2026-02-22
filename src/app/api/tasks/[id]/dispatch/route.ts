@@ -19,6 +19,7 @@ interface RouteParams {
 export async function POST(request: NextRequest, { params }: RouteParams) {
   try {
     const { id } = await params;
+    const body = await request.json().catch(() => ({} as Record<string, unknown>));
 
     // Get task with agent info
     const task = queryOne<Task & { assigned_agent_name?: string; workspace_id: string }>(
@@ -144,7 +145,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const taskProjectDir = `${projectsPath}/${projectDir}`;
     const missionControlUrl = getMissionControlUrl();
 
-    const taskMessage = `${priorityEmoji} **NEW TASK ASSIGNED**
+    const defaultTaskMessage = `${priorityEmoji} **NEW TASK ASSIGNED**
 
 **Title:** ${task.title}
 ${task.description ? `**Description:** ${task.description}\n` : ''}
@@ -168,15 +169,18 @@ When complete, reply with:
 
 If you need help or clarification, ask the orchestrator.`;
 
+    const overrideMessage = typeof body.override_message === 'string' ? body.override_message.trim() : '';
+    const taskMessage = overrideMessage || defaultTaskMessage;
+
     // Send message to agent's session using chat.send
     try {
-      // Use sessionKey for routing to the agent's session
-      // Format: agent:main:{openclaw_session_id}
-      const sessionKey = `agent:main:${session.openclaw_session_id}`;
+      // Route through the real requester path so tool permissions include sessions_spawn
+      const sessionKey = `dm:${agent.id}`;
+      const externalRequestId = typeof body.external_request_id === 'string' ? body.external_request_id : undefined;
       await client.call('chat.send', {
         sessionKey,
         message: taskMessage,
-        idempotencyKey: `dispatch-${task.id}-${Date.now()}`
+        idempotencyKey: externalRequestId ? `dispatch-${externalRequestId}` : `dispatch-${task.id}-${Date.now()}`
       });
 
       // Update task status to in_progress

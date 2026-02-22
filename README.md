@@ -119,6 +119,7 @@ Open **http://localhost:4000** — you're in! 🎉
 ```bash
 npm run build
 npx next start -p 4000
+npm run smoke
 ```
 
 ---

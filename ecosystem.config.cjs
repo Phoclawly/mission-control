@@ -3,12 +3,12 @@ module.exports = {
     {
       name: 'mission-control',
       script: 'node_modules/.bin/next',
-      args: 'start -p 4040 -H 0.0.0.0',
+      args: 'start -p 4040 -H 127.0.0.1',
       cwd: '/home/node/.openclaw/repos/mission-control',
       env: {
         NODE_ENV: 'production',
         PORT: '4040',
-        HOSTNAME: '0.0.0.0',
+        HOSTNAME: '127.0.0.1',
         // Keep MISSION_CONTROL_URL aligned with exposed host/port for smoke checks
         MISSION_CONTROL_URL: 'http://127.0.0.1:4040',
         // Force load .env.local

@@ -62,6 +62,8 @@ function getClientIp(request: NextRequest): string {
 
 // Log warning at startup if auth is disabled
 const MC_API_TOKEN = process.env.MC_API_TOKEN;
+const BASIC_AUTH_USER = process.env.BASIC_AUTH_USER;
+const BASIC_AUTH_PASS = process.env.BASIC_AUTH_PASS;
 if (!MC_API_TOKEN) {
   console.warn('[SECURITY WARNING] MC_API_TOKEN not set - API authentication is DISABLED (local dev mode)');
 }
@@ -170,26 +172,42 @@ export function middleware(request: NextRequest) {
     // Fall through to header check below
   }
 
-  // Check Authorization header for bearer token
+  // Check Authorization header for bearer token or basic auth
   const authHeader = request.headers.get('authorization');
-  
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+
+  if (!authHeader) {
     return NextResponse.json(
       { error: 'Unauthorized' },
       { status: 401 }
     );
   }
 
-  const token = authHeader.substring(7); // Remove 'Bearer ' prefix
-  
-  if (token !== MC_API_TOKEN) {
+  // Bearer token auth
+  if (authHeader.startsWith('Bearer ')) {
+    const token = authHeader.substring(7);
+    if (token === MC_API_TOKEN) {
+      return NextResponse.next();
+    }
     return NextResponse.json(
       { error: 'Unauthorized' },
       { status: 401 }
     );
   }
 
-  return NextResponse.next();
+  // Basic Auth (if BASIC_AUTH_USER and BASIC_AUTH_PASS are configured)
+  if (authHeader.startsWith('Basic ') && BASIC_AUTH_USER && BASIC_AUTH_PASS) {
+    const encoded = authHeader.substring(6);
+    const decoded = Buffer.from(encoded, 'base64').toString('utf-8');
+    const [user, pass] = decoded.split(':');
+    if (user === BASIC_AUTH_USER && pass === BASIC_AUTH_PASS) {
+      return NextResponse.next();
+    }
+  }
+
+  return NextResponse.json(
+    { error: 'Unauthorized' },
+    { status: 401 }
+  );
 }
 
 export const config = {

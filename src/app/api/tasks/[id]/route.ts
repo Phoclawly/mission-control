@@ -45,11 +45,11 @@ function mapKanbanStatusToInitiative(kanbanStatus: string): string {
       return 'planned';
     case 'done':
     case 'completed':
+    case 'review':
       return 'completed';
     case 'cancelled':
       return 'canceled';
     case 'in_progress':
-    case 'review':
     case 'inbox':
     case 'backlog':
     case 'assigned':
@@ -285,8 +285,8 @@ export async function PATCH(
       throw err;
     }
 
-    // Writeback to INITIATIVES.json for squad workspace tasks
-    if (statusChanged && validatedData.status && existing.workspace_id === 'squad') {
+    // Writeback to INITIATIVES.json for all tasks with initiative IDs or matching naming
+    if (statusChanged && validatedData.status) {
       writebackToInitiatives(id, existing.title, validatedData.status, validatedData.initiative_id || existing.initiative_id || null);
     }
 

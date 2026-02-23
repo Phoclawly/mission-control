@@ -76,6 +76,17 @@ export async function POST(
     }
 
     const db = getDb();
+
+    // Upsert: if (task_id, path) already exists, return existing record
+    if (path) {
+      const existing = db.prepare(
+        'SELECT * FROM task_deliverables WHERE task_id = ? AND path = ?'
+      ).get(taskId, path) as TaskDeliverable | undefined;
+      if (existing) {
+        return NextResponse.json({ ...existing, deduplicated: true }, { status: 200 });
+      }
+    }
+
     const id = crypto.randomUUID();
 
     // Insert deliverable

@@ -58,12 +58,15 @@ function now() {
  */
 function parseAgentNameFromSoul(soulMd) {
   if (!soulMd) return null;
-  // Pattern 1: "# SOUL.md — Name (Role)"
-  const match1 = soulMd.match(/^#\s+SOUL\.md\s*[—–-]\s*(\S+)(?:\s*\(([^)]+)\))?/m);
-  if (match1) return { name: match1[1], role: match1[2] || null };
+  // Pattern 1: "# SOUL.md — Name (Role)" or "# SOUL.md — Multi Word Name (Role)"
+  const match1 = soulMd.match(/^#\s+SOUL\.md\s*[—–-]\s*(.+?)\s*\(([^)]+)\)/m);
+  if (match1) return { name: match1[1].trim(), role: match1[2].trim() };
+  // Pattern 1b: "# SOUL.md — Name" (no parenthesized role)
+  const match1b = soulMd.match(/^#\s+SOUL\.md\s*[—–-]\s*(.+)/m);
+  if (match1b) return { name: match1b[1].trim(), role: null };
   // Pattern 2: "# Name — Role" (no SOUL.md prefix)
-  const match2 = soulMd.match(/^#\s+(\S+)\s*[—–-]\s*(.+)/m);
-  if (match2) return { name: match2[1], role: match2[2].trim() || null };
+  const match2 = soulMd.match(/^#\s+(.+?)\s*[—–-]\s*(.+)/m);
+  if (match2) return { name: match2[1].trim(), role: match2[2].trim() || null };
   return null;
 }
 
@@ -221,8 +224,11 @@ function syncAgents(db) {
         file.replace(/^agent-/, '').replace(/\.json$/, '');
 
       // Read workspace markdown files
+      // Main agent workspace is just "workspace" (no suffix), others are "workspace-{id}"
       const wsBase = path.resolve(WORKSPACE, '..');
-      const wsDir = path.join(wsBase, `workspace-${agentId}`);
+      const wsDir = (agentId === 'main' || agentId === 'pho')
+        ? WORKSPACE
+        : path.join(wsBase, `workspace-${agentId}`);
       const soul_md = readFileText(path.join(wsDir, 'SOUL.md'));
       const tools_md = readFileText(path.join(wsDir, 'TOOLS.md'));
       const user_md = readFileText(path.join(wsDir, 'USER.md'));

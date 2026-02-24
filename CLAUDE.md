@@ -7,6 +7,7 @@ Next.js dashboard for managing OpenClaw agent workspaces, capabilities, integrat
 1. `git pull --rebase` — always sync before touching code
 2. `npm run build` — verify clean build before and after changes
 3. Read relevant source files before editing — understand existing patterns
+4. Check `AGENTS.md` for known gotchas and anti-patterns before touching related areas
 
 ## Behavior
 
@@ -31,9 +32,13 @@ Next.js dashboard for managing OpenClaw agent workspaces, capabilities, integrat
 | `src/app/workspace/[slug]/capabilities/page.tsx` | Capabilities page (tabs: Capabilities, Integrations, Crons, Health) |
 | `src/components/` | UI components (CapabilityTable, IntegrationCard, AlertsBanner, etc.) |
 | `src/lib/types.ts` | All TypeScript interfaces and types |
-| `src/lib/db.ts` | Database helpers (`queryAll`, `queryOne`, `run`) |
+| `src/lib/db/` | Database module (`index.ts` helpers, `schema.ts`, `migrations.ts`, `seed.ts`) |
 | `src/app/api/` | API routes |
+| `src/test/__tests__/` | Vitest unit/integration tests (4 files, 100 tests) |
+| `src/test/helpers/db.ts` | Test DB lifecycle + seed helpers (owns its own better-sqlite3 connection) |
 | `tests/e2e/` | Playwright E2E tests |
+| `src/lib/db/migrations.ts` | Schema migrations (idempotent, never reorder/remove) |
+| `src/lib/task-types.ts` | Pluggable task type registry (openclaw-native, claude-team, multi-hypothesis) |
 
 ## Build & Deploy
 
@@ -68,13 +73,19 @@ After deploying UI changes, **always** use the `/dogfood` skill to visually veri
 
 Prefer `/dogfood` over ad-hoc browser automation for exploratory testing — it produces better coverage and structured, actionable reports.
 
+### Vitest Unit/Integration
+```bash
+npx vitest run                    # all tests
+npx vitest run src/test/__tests__/tasks.test.ts  # single file
+```
+
 ### When to use which
 
 | Scenario | Tool |
 |----------|------|
+| API route logic, DB operations, validation | Vitest (`src/test/__tests__/`) |
 | Regression checks, CI-style assertions | Playwright (`tests/e2e/`) |
 | Post-deploy visual QA, UX review, bug hunting | `/dogfood` |
-| Writing new automated test cases | Playwright |
 
 ## Conventions
 
@@ -93,3 +104,11 @@ Prefer `/dogfood` over ad-hoc browser automation for exploratory testing — it 
 - NEVER skip pre-commit hooks (`--no-verify`)
 - NEVER create documentation files unless explicitly asked
 - Build must pass (`npm run build`) before committing — no shipping type errors
+- PM2 `resurrect` can load stale dumps with old configs. If MC crashes post-resurrect: `pm2 delete all` + `pm2 start ecosystem.config.cjs` + `pm2 save`
+- Migrations run on first DB connection, NOT on code change — if MC was already running, apply migrations manually before restart
+
+## Quality Gates (before commit)
+
+1. `npm run build` — zero type errors
+2. `npx vitest run` — all tests pass (93/100 expected; 7 known middleware auth failures)
+3. Verify the change works on `localhost:14040` if it touches UI

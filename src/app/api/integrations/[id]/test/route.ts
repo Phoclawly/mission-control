@@ -35,6 +35,29 @@
  *   credential_provider (1password) → `op whoami`
  *   cli_auth (gog:OAuth2)           → `gog auth list`
  *   webhook (built-in)              → always pass
+ *
+ * ─── Adding a new integration ───────────────────────────────────────────
+ *
+ * 1. Create DB record via POST /api/integrations:
+ *    {
+ *      name: "My Service",
+ *      type: "api_key",           // or cli_auth, webhook, credential_provider, etc.
+ *      provider: "myservice",     // lowercase identifier, used in validateApiKey() switch
+ *      credential_source: ".env:MYSERVICE_API_KEY"  // see patterns above
+ *    }
+ *
+ * 2. Add provider-specific validation (optional but recommended):
+ *    - Add a case to `validateApiKey()` below
+ *    - Pick a lightweight read-only endpoint (GET /me, GET /models, etc.)
+ *    - Use AbortSignal.timeout(10_000) for standard APIs, 30_000 for slow ones
+ *    - Return { ok: true, detail } on 200, { ok: false, detail } on 401/403
+ *    - 429 (rate limited) should return ok=true (key is valid, just throttled)
+ *
+ * 3. If no validation endpoint exists, the default handler checks credential
+ *    existence and returns `Credential present (N chars)`.
+ *
+ * 4. For new credential_source patterns, add resolution logic in
+ *    `resolveCredential()` above.
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { queryOne, run } from '@/lib/db';

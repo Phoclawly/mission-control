@@ -14,8 +14,8 @@ test.describe('Capabilities redesign', () => {
   test('collapsible category sections', async ({ page }) => {
     await page.goto(`${BASE}/workspace/default/capabilities`);
     await page.waitForTimeout(2000);
-    await expect(page.getByText('MCP Servers')).toBeVisible();
-    await expect(page.getByText('Skills')).toBeVisible();
+    await expect(page.getByText('MCP Servers').first()).toBeVisible();
+    await expect(page.getByRole('button', { name: /Skills/ }).first()).toBeVisible();
     // Collapse MCP Servers
     await page.locator('button').filter({ hasText: /MCP Servers/ }).click();
     await expect(page.getByText('Context7 MCP')).not.toBeVisible();
@@ -26,15 +26,15 @@ test.describe('Capabilities redesign', () => {
     await page.waitForTimeout(2000);
     await page.locator('button').filter({ hasText: /New Capability/ }).click();
     await expect(page.getByLabel('Status')).toBeVisible();
-    // Change to skill category
-    await page.locator('dialog select, [role=dialog] select').first().selectOption('skill');
+    // Change to skill category (Category select has id="capability-category")
+    await page.locator('#capability-category').selectOption('skill');
     await expect(page.getByLabel(/Skill Path/i)).toBeVisible();
   });
 
   test('Integration edit modal pre-fills data', async ({ page }) => {
     await page.goto(`${BASE}/workspace/default/capabilities`);
     await page.waitForTimeout(2000);
-    await page.locator('button[aria-label="Integrations"]').click();
+    await page.getByRole('button', { name: /Integrations/i }).click();
     await page.waitForTimeout(1500);
     await page.locator('button[aria-label="Edit integration"]').first().click();
     await expect(page.getByText('Edit Integration')).toBeVisible();
@@ -84,7 +84,7 @@ test.describe('Capabilities redesign', () => {
     await page.waitForTimeout(2000);
     await page.locator('button').filter({ hasText: /By Agent/ }).click();
     await page.waitForTimeout(500);
-    // Agent dropdown should appear
-    await expect(page.getByText('All Agents')).toBeVisible();
+    // Agent dropdown (select) should appear with "All Agents" as the first option
+    await expect(page.locator('select').filter({ hasText: 'All Agents' })).toBeVisible();
   });
 });

@@ -154,10 +154,11 @@ export function CapabilityModal({ capability, onClose, onSaved }: CapabilityModa
 
           {/* Category */}
           <div>
-            <label className="block text-sm font-medium mb-1">
+            <label htmlFor="capability-category" className="block text-sm font-medium mb-1">
               Category <span className="text-mc-accent-red">*</span>
             </label>
             <select
+              id="capability-category"
               value={form.category}
               onChange={setField('category')}
               required

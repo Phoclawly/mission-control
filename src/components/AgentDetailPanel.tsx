@@ -1,15 +1,17 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { X, Edit, Clock, CheckCircle, Activity, FileText, Shield, Power } from 'lucide-react';
+import { X, Edit, Clock, Activity, FileText, Shield, ChevronDown, ChevronRight, Plus, Search, Pencil } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { formatDistanceToNow } from 'date-fns';
-import type { Agent, TaskActivity, OpenClawSession, Capability, CronJob } from '@/lib/types';
+import type { Agent, TaskActivity, OpenClawSession, Capability, CronJob, CapabilityCategory } from '@/lib/types';
+import { CronModal } from '@/components/modals/CronModal';
 
 interface AgentDetailPanelProps {
   agentId: string;
   onClose: () => void;
   onEdit: (agent: Agent) => void;
+  agents?: Agent[];
 }
 
 const tabs = [
@@ -24,6 +26,31 @@ const tabs = [
 
 type TabId = typeof tabs[number]['id'];
 
+const capabilityCategoryOrder: CapabilityCategory[] = [
+  'mcp_server',
+  'browser_automation',
+  'cli_tool',
+  'skill',
+  'workflow',
+  'api_integration',
+];
+
+const capabilityCategoryLabels: Record<CapabilityCategory, string> = {
+  mcp_server: 'MCP Servers',
+  browser_automation: 'Browser Automation',
+  cli_tool: 'CLI Tools',
+  skill: 'Skills',
+  workflow: 'Workflows',
+  api_integration: 'API Integrations',
+  credential_provider: 'Credential Providers',
+};
+
+const cronStatusClasses: Record<string, string> = {
+  active: 'bg-mc-accent-green/20 text-mc-accent-green border-mc-accent-green/30',
+  disabled: 'bg-mc-bg-tertiary text-mc-text-secondary border-mc-border',
+  stale: 'bg-mc-accent-yellow/20 text-mc-accent-yellow border-mc-accent-yellow/30',
+};
+
 function getStatusBadgeClasses(status: string): string {
   switch (status) {
     case 'working':
@@ -37,7 +64,15 @@ function getStatusBadgeClasses(status: string): string {
   }
 }
 
-export function AgentDetailPanel({ agentId, onClose, onEdit }: AgentDetailPanelProps) {
+const capStatusClasses: Record<string, string> = {
+  healthy: 'bg-mc-accent-green/20 text-mc-accent-green border-mc-accent-green/30',
+  broken: 'bg-mc-accent-red/20 text-mc-accent-red border-mc-accent-red/30',
+  degraded: 'bg-mc-accent-yellow/20 text-mc-accent-yellow border-mc-accent-yellow/30',
+  unknown: 'bg-mc-bg-tertiary text-mc-text-secondary border-mc-border',
+  disabled: 'bg-mc-bg-tertiary text-mc-text-secondary border-mc-border',
+};
+
+export function AgentDetailPanel({ agentId, onClose, onEdit, agents = [] }: AgentDetailPanelProps) {
   const [activeTab, setActiveTab] = useState<TabId>('overview');
   const [agent, setAgent] = useState<Agent | null>(null);
   const [stats, setStats] = useState({ tasksAssigned: 0, tasksCompleted: 0, totalTasks: 0 });
@@ -48,6 +83,24 @@ export function AgentDetailPanel({ agentId, onClose, onEdit }: AgentDetailPanelP
   const [agentCrons, setAgentCrons] = useState<CronJob[]>([]);
   const [capsLoading, setCapsLoading] = useState(false);
   const [cronsLoading, setCronsLoading] = useState(false);
+
+  // Collapsed categories state for capabilities tab
+  const [collapsedCapCategories, setCollapsedCapCategories] = useState<Record<string, boolean>>({});
+
+  // Per-capability inline content state
+  const [expandedCapContent, setExpandedCapContent] = useState<Record<string, boolean>>({});
+  const [capContent, setCapContent] = useState<Record<string, string>>({});
+  const [capContentLoading, setCapContentLoading] = useState<Record<string, boolean>>({});
+
+  // Link capability state
+  const [linkCapSearch, setLinkCapSearch] = useState('');
+  const [linkCapResults, setLinkCapResults] = useState<Capability[]>([]);
+  const [linkCapLoading, setLinkCapLoading] = useState(false);
+  const [showLinkCap, setShowLinkCap] = useState(false);
+
+  // Cron modal state
+  const [cronModalOpen, setCronModalOpen] = useState(false);
+  const [editingCron, setEditingCron] = useState<CronJob | undefined>(undefined);
 
   // Fetch data on mount/agentId change
   useEffect(() => {
@@ -113,6 +166,94 @@ export function AgentDetailPanel({ agentId, onClose, onEdit }: AgentDetailPanelP
       }
     })();
   }, [activeTab, agentId]);
+
+  // Search capabilities for linking
+  useEffect(() => {
+    if (!linkCapSearch.trim()) {
+      setLinkCapResults([]);
+      return;
+    }
+    setLinkCapLoading(true);
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/capabilities?search=${encodeURIComponent(linkCapSearch)}`);
+        if (res.ok) {
+          const data = await res.json();
+          setLinkCapResults(data.slice(0, 10));
+        }
+      } catch (error) {
+        console.error('Failed to search capabilities:', error);
+      } finally {
+        setLinkCapLoading(false);
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [linkCapSearch]);
+
+  const toggleCapCategory = (category: string) => {
+    setCollapsedCapCategories((prev) => ({ ...prev, [category]: !prev[category] }));
+  };
+
+  const toggleCapContent = async (cap: Capability) => {
+    const isExpanded = expandedCapContent[cap.id];
+    if (isExpanded) {
+      setExpandedCapContent((prev) => ({ ...prev, [cap.id]: false }));
+      return;
+    }
+    if (!capContent[cap.id]) {
+      setCapContentLoading((prev) => ({ ...prev, [cap.id]: true }));
+      try {
+        const res = await fetch(`/api/capabilities/${cap.id}/content`);
+        if (res.ok) {
+          const data = await res.json();
+          setCapContent((prev) => ({ ...prev, [cap.id]: data.content ?? '' }));
+        }
+      } catch (error) {
+        console.error('Failed to fetch capability content:', error);
+      } finally {
+        setCapContentLoading((prev) => ({ ...prev, [cap.id]: false }));
+      }
+    }
+    setExpandedCapContent((prev) => ({ ...prev, [cap.id]: true }));
+  };
+
+  const handleLinkCapability = async (capId: string) => {
+    try {
+      const res = await fetch(`/api/agents/${agentId}/capabilities`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ capability_id: capId }),
+      });
+      if (res.ok) {
+        // Refresh capabilities list
+        const capsRes = await fetch(`/api/agents/${agentId}/capabilities`);
+        if (capsRes.ok) {
+          const data = await capsRes.json();
+          const caps: Capability[] = data.map((item: { capability?: Capability } & Capability) =>
+            item.capability ? item.capability : item
+          );
+          setAgentCapabilities(caps);
+        }
+        setLinkCapSearch('');
+        setLinkCapResults([]);
+        setShowLinkCap(false);
+      }
+    } catch (error) {
+      console.error('Failed to link capability:', error);
+    }
+  };
+
+  const handleCronSaved = (saved: CronJob) => {
+    setCronModalOpen(false);
+    setAgentCrons((prev) => {
+      const exists = prev.find((c) => c.id === saved.id);
+      if (exists) {
+        return prev.map((c) => (c.id === saved.id ? saved : c));
+      }
+      return [...prev, saved];
+    });
+    setEditingCron(undefined);
+  };
 
   if (loading) {
     return (
@@ -276,38 +417,156 @@ export function AgentDetailPanel({ agentId, onClose, onEdit }: AgentDetailPanelP
         </div>
       );
     }
-    if (agentCapabilities.length === 0) {
-      return (
-        <div className="text-center py-8">
-          <Shield className="w-8 h-8 mx-auto mb-2 text-mc-text-secondary opacity-50" />
-          <p className="text-mc-text-secondary">No capabilities assigned</p>
-        </div>
-      );
-    }
+
+    // Group by category
+    const grouped: Record<string, Capability[]> = {};
+    agentCapabilities.forEach((cap) => {
+      const key = cap.category;
+      if (!grouped[key]) grouped[key] = [];
+      grouped[key].push(cap);
+    });
+
+    const presentCategories: CapabilityCategory[] = [];
+    capabilityCategoryOrder.forEach((cat) => {
+      if (grouped[cat]?.length) presentCategories.push(cat);
+    });
+    Object.keys(grouped).forEach((cat) => {
+      const typedCat = cat as CapabilityCategory;
+      if (!presentCategories.includes(typedCat)) presentCategories.push(typedCat);
+    });
+
     return (
-      <div className="space-y-2">
-        {agentCapabilities.map((cap) => {
-          const statusClasses: Record<string, string> = {
-            healthy: 'bg-mc-accent-green/20 text-mc-accent-green border-mc-accent-green/30',
-            broken: 'bg-mc-accent-red/20 text-mc-accent-red border-mc-accent-red/30',
-            degraded: 'bg-mc-accent-yellow/20 text-mc-accent-yellow border-mc-accent-yellow/30',
-            unknown: 'bg-mc-bg-tertiary text-mc-text-secondary border-mc-border',
-            disabled: 'bg-mc-bg-tertiary text-mc-text-secondary border-mc-border',
-          };
-          return (
-            <div key={cap.id} className="flex items-center justify-between p-3 bg-mc-bg rounded border border-mc-border/50">
-              <div>
-                <span className="text-sm font-medium text-mc-text">{cap.name}</span>
-                {cap.category && (
-                  <span className="ml-2 text-xs text-mc-text-secondary">{cap.category.replace(/_/g, ' ')}</span>
+      <div className="space-y-3">
+        {agentCapabilities.length === 0 ? (
+          <div className="text-center py-8">
+            <Shield className="w-8 h-8 mx-auto mb-2 text-mc-text-secondary opacity-50" />
+            <p className="text-mc-text-secondary">No capabilities assigned</p>
+          </div>
+        ) : (
+          presentCategories.map((category) => {
+            const caps = grouped[category] ?? [];
+            const isCollapsed = collapsedCapCategories[category] ?? false;
+            const displayName = capabilityCategoryLabels[category] ?? category.replace(/_/g, ' ');
+
+            return (
+              <div key={category} className="border border-mc-border rounded-lg overflow-hidden">
+                <button
+                  onClick={() => toggleCapCategory(category)}
+                  className="w-full flex items-center justify-between px-3 py-2 bg-mc-bg-secondary hover:bg-mc-bg-tertiary transition-colors text-left"
+                >
+                  <div className="flex items-center gap-2">
+                    {isCollapsed ? (
+                      <ChevronRight className="w-3.5 h-3.5 text-mc-text-secondary" />
+                    ) : (
+                      <ChevronDown className="w-3.5 h-3.5 text-mc-text-secondary" />
+                    )}
+                    <span className="text-sm font-medium text-mc-text">{displayName}</span>
+                    <span className="text-xs px-1.5 py-0.5 rounded bg-mc-bg-tertiary text-mc-text-secondary border border-mc-border">
+                      {caps.length}
+                    </span>
+                  </div>
+                </button>
+
+                {!isCollapsed && (
+                  <div className="divide-y divide-mc-border/50">
+                    {caps.map((cap) => (
+                      <div key={cap.id} className="p-3 bg-mc-bg">
+                        <div className="flex items-center justify-between mb-1">
+                          <div className="flex-1 min-w-0">
+                            <span className="text-sm font-medium text-mc-text">{cap.name}</span>
+                            {cap.skill_path && (
+                              <span className="ml-2 text-xs font-mono text-mc-accent-cyan bg-mc-bg-tertiary px-1.5 py-0.5 rounded">
+                                {cap.skill_path}
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2 flex-shrink-0">
+                            {cap.category === 'skill' && (
+                              <button
+                                onClick={() => toggleCapContent(cap)}
+                                disabled={capContentLoading[cap.id]}
+                                className="text-xs px-2 py-0.5 rounded bg-mc-bg-tertiary text-mc-text-secondary hover:text-mc-text border border-mc-border hover:border-mc-accent/50 transition-colors disabled:opacity-50"
+                              >
+                                {capContentLoading[cap.id]
+                                  ? 'Loading...'
+                                  : expandedCapContent[cap.id]
+                                  ? 'Hide .md'
+                                  : 'View .md'}
+                              </button>
+                            )}
+                            <span className={`text-xs px-2 py-0.5 rounded-full border ${capStatusClasses[cap.status] ?? capStatusClasses.unknown}`}>
+                              {cap.status}
+                            </span>
+                          </div>
+                        </div>
+                        {expandedCapContent[cap.id] && capContent[cap.id] && (
+                          <pre className="mt-2 text-xs text-mc-text-secondary bg-mc-bg-secondary border border-mc-border rounded p-2 overflow-x-auto whitespace-pre-wrap">
+                            {capContent[cap.id]}
+                          </pre>
+                        )}
+                      </div>
+                    ))}
+                  </div>
                 )}
               </div>
-              <span className={`text-xs px-2 py-0.5 rounded-full border ${statusClasses[cap.status] ?? statusClasses.unknown}`}>
-                {cap.status}
-              </span>
+            );
+          })
+        )}
+
+        {/* Link Capability */}
+        <div className="pt-2 border-t border-mc-border/50">
+          {showLinkCap ? (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <div className="relative flex-1">
+                  <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-mc-text-secondary" />
+                  <input
+                    type="text"
+                    value={linkCapSearch}
+                    onChange={(e) => setLinkCapSearch(e.target.value)}
+                    placeholder="Search capabilities..."
+                    className="w-full pl-8 pr-3 py-1.5 text-sm bg-mc-bg-tertiary border border-mc-border rounded focus:outline-none focus:border-mc-accent text-mc-text"
+                    autoFocus
+                  />
+                </div>
+                <button
+                  onClick={() => { setShowLinkCap(false); setLinkCapSearch(''); setLinkCapResults([]); }}
+                  className="text-xs text-mc-text-secondary hover:text-mc-text px-2 py-1.5"
+                >
+                  Cancel
+                </button>
+              </div>
+              {linkCapLoading && (
+                <p className="text-xs text-mc-text-secondary px-1">Searching...</p>
+              )}
+              {linkCapResults.length > 0 && (
+                <div className="border border-mc-border rounded overflow-hidden">
+                  {linkCapResults.map((cap) => (
+                    <button
+                      key={cap.id}
+                      onClick={() => handleLinkCapability(cap.id)}
+                      className="w-full flex items-center justify-between px-3 py-2 hover:bg-mc-bg-tertiary transition-colors text-left border-b border-mc-border/50 last:border-b-0"
+                    >
+                      <div>
+                        <span className="text-sm text-mc-text">{cap.name}</span>
+                        <span className="ml-2 text-xs text-mc-text-secondary">{cap.category.replace(/_/g, ' ')}</span>
+                      </div>
+                      <Plus className="w-3.5 h-3.5 text-mc-text-secondary" />
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
-          );
-        })}
+          ) : (
+            <button
+              onClick={() => setShowLinkCap(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium bg-mc-bg-tertiary text-mc-text-secondary hover:text-mc-text rounded border border-mc-border hover:border-mc-accent/50 transition-colors"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              Link Capability
+            </button>
+          )}
+        </div>
       </div>
     );
   };
@@ -321,42 +580,68 @@ export function AgentDetailPanel({ agentId, onClose, onEdit }: AgentDetailPanelP
         </div>
       );
     }
-    if (agentCrons.length === 0) {
-      return (
-        <div className="text-center py-8">
-          <Clock className="w-8 h-8 mx-auto mb-2 text-mc-text-secondary opacity-50" />
-          <p className="text-mc-text-secondary">No cron jobs assigned</p>
-        </div>
-      );
-    }
+
     return (
-      <div className="space-y-2">
-        {agentCrons.map((cron) => {
-          const cronStatusClasses: Record<string, string> = {
-            active: 'bg-mc-accent-green/20 text-mc-accent-green border-mc-accent-green/30',
-            disabled: 'bg-mc-bg-tertiary text-mc-text-secondary border-mc-border',
-            stale: 'bg-mc-accent-yellow/20 text-mc-accent-yellow border-mc-accent-yellow/30',
-          };
-          return (
-            <div key={cron.id} className="p-3 bg-mc-bg rounded border border-mc-border/50">
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-sm font-medium text-mc-text">{cron.name}</span>
-                <span className={`text-xs px-2 py-0.5 rounded-full border ${cronStatusClasses[cron.status] ?? cronStatusClasses.disabled}`}>
-                  {cron.status}
-                </span>
-              </div>
-              <div className="flex items-center gap-3 text-xs text-mc-text-secondary">
-                <span className="font-mono">{cron.schedule}</span>
-                {cron.last_run && (
-                  <span>Last: {formatDistanceToNow(new Date(cron.last_run), { addSuffix: true })}</span>
+      <div className="space-y-3">
+        {/* Add Cron button */}
+        <div className="flex justify-end">
+          <button
+            onClick={() => { setEditingCron(undefined); setCronModalOpen(true); }}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium bg-mc-accent text-mc-bg rounded hover:bg-mc-accent/90 transition-colors"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            Add Cron
+          </button>
+        </div>
+
+        {agentCrons.length === 0 ? (
+          <div className="text-center py-8">
+            <Clock className="w-8 h-8 mx-auto mb-2 text-mc-text-secondary opacity-50" />
+            <p className="text-mc-text-secondary">No cron jobs assigned</p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {agentCrons.map((cron) => (
+              <div key={cron.id} className="p-3 bg-mc-bg rounded border border-mc-border/50">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-sm font-medium text-mc-text">{cron.name}</span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => { setEditingCron(cron); setCronModalOpen(true); }}
+                      className="p-1 rounded text-mc-text-secondary hover:bg-mc-bg-tertiary hover:text-mc-text transition-colors"
+                      title="Edit cron"
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                    </button>
+                    <span className={`text-xs px-2 py-0.5 rounded-full border ${cronStatusClasses[cron.status] ?? cronStatusClasses.disabled}`}>
+                      {cron.status}
+                    </span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3 text-xs text-mc-text-secondary">
+                  <span className="font-mono">{cron.schedule}</span>
+                  {cron.last_run && (
+                    <span>Last: {formatDistanceToNow(new Date(cron.last_run), { addSuffix: true })}</span>
+                  )}
+                </div>
+                {cron.description && (
+                  <p className="text-xs text-mc-text-secondary mt-1">{cron.description}</p>
                 )}
               </div>
-              {cron.description && (
-                <p className="text-xs text-mc-text-secondary mt-1">{cron.description}</p>
-              )}
-            </div>
-          );
-        })}
+            ))}
+          </div>
+        )}
+
+        {/* Cron Modal */}
+        {cronModalOpen && (
+          <CronModal
+            cron={editingCron}
+            agentId={agentId}
+            agents={agents}
+            onClose={() => { setCronModalOpen(false); setEditingCron(undefined); }}
+            onSaved={handleCronSaved}
+          />
+        )}
       </div>
     );
   };

@@ -1,9 +1,10 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Clock, ChevronDown, ChevronRight, Power, PowerOff, AlertTriangle } from 'lucide-react';
+import { Clock, ChevronDown, ChevronRight, Power, PowerOff, AlertTriangle, Plus, Pencil } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
-import type { CronJob, CronJobStatus } from '@/lib/types';
+import type { CronJob, CronJobStatus, Agent } from '@/lib/types';
+import { CronModal } from '@/components/modals/CronModal';
 
 function getStatusBadge(status: CronJobStatus) {
   const map: Record<CronJobStatus, { label: string; classes: string }> = {
@@ -28,12 +29,18 @@ function getStatusBadge(status: CronJobStatus) {
   );
 }
 
-export function CronJobsTable() {
+interface CronJobsTableProps {
+  agents?: Agent[];
+}
+
+export function CronJobsTable({ agents = [] }: CronJobsTableProps) {
   const [cronJobs, setCronJobs] = useState<CronJob[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [togglingIds, setTogglingIds] = useState<Set<string>>(new Set());
   const [disablingAll, setDisablingAll] = useState(false);
+  const [cronModalOpen, setCronModalOpen] = useState(false);
+  const [editingCron, setEditingCron] = useState<CronJob | undefined>(undefined);
 
   const fetchCronJobs = async () => {
     setLoading(true);
@@ -113,6 +120,28 @@ export function CronJobsTable() {
     }
   };
 
+  const handleOpenNewCron = () => {
+    setEditingCron(undefined);
+    setCronModalOpen(true);
+  };
+
+  const handleOpenEditCron = (cron: CronJob) => {
+    setEditingCron(cron);
+    setCronModalOpen(true);
+  };
+
+  const handleCronSaved = (saved: CronJob) => {
+    setCronModalOpen(false);
+    setCronJobs((prev) => {
+      const exists = prev.find((c) => c.id === saved.id);
+      if (exists) {
+        return prev.map((c) => (c.id === saved.id ? saved : c));
+      }
+      return [...prev, saved];
+    });
+    setEditingCron(undefined);
+  };
+
   // Group crons by agent
   const grouped: Record<string, CronJob[]> = {};
   cronJobs.forEach((cron) => {
@@ -136,11 +165,30 @@ export function CronJobsTable() {
     );
   }
 
-  if (cronJobs.length === 0) {
+  if (cronJobs.length === 0 && !cronModalOpen) {
     return (
-      <div className="text-center py-12">
-        <Clock className="w-10 h-10 mx-auto mb-3 text-mc-text-secondary opacity-50" />
-        <p className="text-mc-text-secondary">No cron jobs configured.</p>
+      <div className="space-y-4">
+        <div className="flex items-center justify-end">
+          <button
+            onClick={handleOpenNewCron}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium bg-mc-accent text-mc-bg rounded hover:bg-mc-accent/90 transition-colors"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            New Cron
+          </button>
+        </div>
+        <div className="text-center py-12">
+          <Clock className="w-10 h-10 mx-auto mb-3 text-mc-text-secondary opacity-50" />
+          <p className="text-mc-text-secondary">No cron jobs configured.</p>
+        </div>
+        {cronModalOpen && (
+          <CronModal
+            cron={editingCron}
+            agents={agents}
+            onClose={() => { setCronModalOpen(false); setEditingCron(undefined); }}
+            onSaved={handleCronSaved}
+          />
+        )}
       </div>
     );
   }
@@ -152,14 +200,23 @@ export function CronJobsTable() {
         <span className="text-sm text-mc-text-secondary">
           {cronJobs.length} cron job{cronJobs.length !== 1 ? 's' : ''} across {groupKeys.length} agent{groupKeys.length !== 1 ? 's' : ''}
         </span>
-        <button
-          onClick={disableAllCrons}
-          disabled={disablingAll}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-mc-accent-red/10 text-mc-accent-red border border-mc-accent-red/30 rounded hover:bg-mc-accent-red/20 transition-colors disabled:opacity-50"
-        >
-          <PowerOff className="w-3.5 h-3.5" />
-          {disablingAll ? 'Disabling...' : 'Disable All Crons'}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleOpenNewCron}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium bg-mc-accent text-mc-bg rounded hover:bg-mc-accent/90 transition-colors"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            New Cron
+          </button>
+          <button
+            onClick={disableAllCrons}
+            disabled={disablingAll}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-mc-accent-red/10 text-mc-accent-red border border-mc-accent-red/30 rounded hover:bg-mc-accent-red/20 transition-colors disabled:opacity-50"
+          >
+            <PowerOff className="w-3.5 h-3.5" />
+            {disablingAll ? 'Disabling...' : 'Disable All Crons'}
+          </button>
+        </div>
       </div>
 
       {/* Grouped crons */}
@@ -226,18 +283,29 @@ export function CronJobsTable() {
                         )}
                       </div>
                     </div>
-                    <button
-                      onClick={() => toggleCron(cron.id, cron.status)}
-                      disabled={togglingIds.has(cron.id)}
-                      className={`p-2 rounded transition-colors disabled:opacity-50 ${
-                        cron.status === 'active'
-                          ? 'text-mc-accent-green hover:bg-mc-accent-green/10'
-                          : 'text-mc-text-secondary hover:bg-mc-bg-tertiary'
-                      }`}
-                      title={cron.status === 'active' ? 'Disable' : 'Enable'}
-                    >
-                      <Power className="w-4 h-4" />
-                    </button>
+                    <div className="flex items-center gap-1 ml-2">
+                      {/* Edit button */}
+                      <button
+                        onClick={() => handleOpenEditCron(cron)}
+                        className="p-2 rounded text-mc-text-secondary hover:bg-mc-bg-tertiary hover:text-mc-text transition-colors"
+                        title="Edit cron"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                      {/* Toggle button */}
+                      <button
+                        onClick={() => toggleCron(cron.id, cron.status)}
+                        disabled={togglingIds.has(cron.id)}
+                        className={`p-2 rounded transition-colors disabled:opacity-50 ${
+                          cron.status === 'active'
+                            ? 'text-mc-accent-green hover:bg-mc-accent-green/10'
+                            : 'text-mc-text-secondary hover:bg-mc-bg-tertiary'
+                        }`}
+                        title={cron.status === 'active' ? 'Disable' : 'Enable'}
+                      >
+                        <Power className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -245,6 +313,16 @@ export function CronJobsTable() {
           </div>
         );
       })}
+
+      {/* Cron Modal */}
+      {cronModalOpen && (
+        <CronModal
+          cron={editingCron}
+          agents={agents}
+          onClose={() => { setCronModalOpen(false); setEditingCron(undefined); }}
+          onSaved={handleCronSaved}
+        />
+      )}
     </div>
   );
 }

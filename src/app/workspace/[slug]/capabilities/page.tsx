@@ -11,9 +11,10 @@ import { CapabilityTable } from '@/components/CapabilityTable';
 import { IntegrationCard } from '@/components/IntegrationCard';
 import { CronJobsTable } from '@/components/CronJobsTable';
 import { HealthLog } from '@/components/HealthLog';
+import { IntegrationModal } from '@/components/modals/IntegrationModal';
 import { useMissionControl } from '@/lib/store';
 import { useSSE } from '@/hooks/useSSE';
-import type { Workspace, CapabilitiesOverview as CapabilitiesOverviewType, Integration } from '@/lib/types';
+import type { Workspace, CapabilitiesOverview as CapabilitiesOverviewType, Integration, Agent } from '@/lib/types';
 
 type TabId = 'capabilities' | 'integrations' | 'crons' | 'health';
 
@@ -35,7 +36,12 @@ export default function CapabilitiesPage() {
   const [activeTab, setActiveTab] = useState<TabId>('capabilities');
   const [overview, setOverview] = useState<CapabilitiesOverviewType | null>(null);
   const [integrations, setIntegrations] = useState<Integration[]>([]);
+  const [agents, setLocalAgents] = useState<Agent[]>([]);
   const [overviewLoading, setOverviewLoading] = useState(true);
+
+  // Integration modal state
+  const [integrationModalOpen, setIntegrationModalOpen] = useState(false);
+  const [editingIntegration, setEditingIntegration] = useState<Integration | undefined>(undefined);
 
   // Connect to SSE for real-time updates
   useSSE();
@@ -72,7 +78,7 @@ export default function CapabilitiesPage() {
       try {
         const [overviewRes, agentsRes, integrationsRes] = await Promise.all([
           fetch('/api/capabilities/overview'),
-          fetch('/api/agents'),
+          fetch(`/api/agents?workspace_id=${workspace!.id}`),
           fetch('/api/integrations'),
         ]);
 
@@ -81,7 +87,9 @@ export default function CapabilitiesPage() {
           setOverview(data);
         }
         if (agentsRes.ok) {
-          setAgents(await agentsRes.json());
+          const agentsData: Agent[] = await agentsRes.json();
+          setAgents(agentsData);
+          setLocalAgents(agentsData);
         }
         if (integrationsRes.ok) {
           setIntegrations(await integrationsRes.json());
@@ -126,6 +134,10 @@ export default function CapabilitiesPage() {
     } catch (error) {
       console.error('Failed to test connection:', error);
     }
+  };
+
+  const handleIntegrationUpdated = (updated: Integration) => {
+    setIntegrations((prev) => prev.map((i) => (i.id === updated.id ? updated : i)));
   };
 
   if (notFound) {
@@ -213,7 +225,11 @@ export default function CapabilitiesPage() {
         )}
 
         {/* Tab content */}
-        {activeTab === 'capabilities' && <CapabilityTable />}
+        {activeTab === 'capabilities' && (
+          <CapabilityTable
+            agents={agents}
+          />
+        )}
 
         {activeTab === 'integrations' && (
           <div>
@@ -229,6 +245,7 @@ export default function CapabilitiesPage() {
                     key={integration.id}
                     integration={integration}
                     onTestConnection={handleTestConnection}
+                    onUpdate={handleIntegrationUpdated}
                   />
                 ))}
               </div>
@@ -236,9 +253,24 @@ export default function CapabilitiesPage() {
           </div>
         )}
 
-        {activeTab === 'crons' && <CronJobsTable />}
+        {activeTab === 'crons' && <CronJobsTable agents={agents} />}
         {activeTab === 'health' && <HealthLog />}
       </div>
+
+      {/* Integration Modal (page-level) */}
+      {integrationModalOpen && (
+        <IntegrationModal
+          integration={editingIntegration}
+          onClose={() => { setIntegrationModalOpen(false); setEditingIntegration(undefined); }}
+          onSaved={(updated) => {
+            setIntegrationModalOpen(false);
+            setEditingIntegration(undefined);
+            setIntegrations((prev) =>
+              prev.map((i) => (i.id === updated.id ? updated : i))
+            );
+          }}
+        />
+      )}
     </div>
   );
 }

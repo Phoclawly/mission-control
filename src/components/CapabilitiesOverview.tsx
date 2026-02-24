@@ -1,6 +1,6 @@
 'use client';
 
-import { Shield, CheckCircle, XCircle, Plug } from 'lucide-react';
+import { CheckCircle, XCircle, Plug, Wrench, BookOpen } from 'lucide-react';
 import type { CapabilitiesOverview as CapabilitiesOverviewType } from '@/lib/types';
 
 interface CapabilitiesOverviewProps {
@@ -8,19 +8,32 @@ interface CapabilitiesOverviewProps {
 }
 
 export function CapabilitiesOverview({ overview }: CapabilitiesOverviewProps) {
-  const totalCapabilities = overview.capabilities.total;
   const healthyCount = overview.capabilities.byStatus?.healthy ?? 0;
   const brokenCount = (overview.capabilities.byStatus?.broken ?? 0) + (overview.capabilities.byStatus?.degraded ?? 0);
   const integrationsCount = overview.integrations.total;
 
+  // Tools: cli_tool + browser_automation
+  const toolsCount = (overview.capabilities.byCategory?.cli_tool ?? 0) + (overview.capabilities.byCategory?.browser_automation ?? 0);
+
+  // Skills: skill category
+  const skillsCount = overview.capabilities.byCategory?.skill ?? 0;
+
   const cards = [
     {
-      label: 'Total Capabilities',
-      value: totalCapabilities,
-      icon: Shield,
+      label: 'Tools',
+      value: toolsCount,
+      icon: Wrench,
       colorClass: 'text-mc-accent-cyan',
       bgClass: 'bg-mc-accent-cyan/10',
       borderClass: 'border-mc-accent-cyan/30',
+    },
+    {
+      label: 'Skills',
+      value: skillsCount,
+      icon: BookOpen,
+      colorClass: 'text-mc-accent-purple',
+      bgClass: 'bg-mc-accent-purple/10',
+      borderClass: 'border-mc-accent-purple/30',
     },
     {
       label: 'Healthy',
@@ -42,14 +55,14 @@ export function CapabilitiesOverview({ overview }: CapabilitiesOverviewProps) {
       label: 'Integrations',
       value: integrationsCount,
       icon: Plug,
-      colorClass: 'text-mc-accent-purple',
-      bgClass: 'bg-mc-accent-purple/10',
-      borderClass: 'border-mc-accent-purple/30',
+      colorClass: 'text-mc-accent-yellow',
+      bgClass: 'bg-mc-accent-yellow/10',
+      borderClass: 'border-mc-accent-yellow/30',
     },
   ];
 
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+    <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
       {cards.map((card) => (
         <div
           key={card.label}

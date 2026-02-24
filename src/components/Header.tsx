@@ -27,6 +27,8 @@ export function Header({ workspace }: HeaderProps) {
   const [updateState, setUpdateState] = useState<'idle' | 'queued' | 'success' | 'failed'>('idle');
   const [updateError, setUpdateError] = useState<string | null>(null);
   const [escalationFile, setEscalationFile] = useState<string | null>(null);
+  const [updateElapsed, setUpdateElapsed] = useState(0);
+  const [updateStartedAt, setUpdateStartedAt] = useState<number | null>(null);
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
@@ -54,26 +56,55 @@ export function Header({ workspace }: HeaderProps) {
     return () => clearInterval(interval);
   }, []);
 
-  // Load current version on mount
+  // Load current version on mount + detect post-update
   useEffect(() => {
     fetch('/api/openclaw/version')
       .then((res) => res.json())
       .then((data) => {
         if (data.current && data.current !== 'unknown') {
           setCurrentVersion(data.current);
+          // Check if we just came back from an update (survives container restart)
+          try {
+            const pending = localStorage.getItem('mc-pending-update');
+            if (pending) {
+              const { targetVersion } = JSON.parse(pending);
+              if (data.current === targetVersion) {
+                // Version matches target — update succeeded!
+                setUpdateState('success');
+                localStorage.removeItem('mc-pending-update');
+                setTimeout(() => setUpdateState('idle'), 30000);
+              } else {
+                // Version doesn't match — might still be in progress or failed
+                const { startedAt } = JSON.parse(pending);
+                if (Date.now() - startedAt > 900000) {
+                  // >15 min — consider it timed out
+                  setUpdateState('failed');
+                  setUpdateError('Update may have failed — version unchanged after restart');
+                  localStorage.removeItem('mc-pending-update');
+                }
+              }
+            }
+          } catch { /* ignore localStorage errors */ }
         }
       })
       .catch(() => {});
   }, []);
 
+  const [checkedNoUpdate, setCheckedNoUpdate] = useState(false);
+
   const checkForUpdates = async () => {
     setVersionChecking(true);
+    setCheckedNoUpdate(false);
     try {
       const res = await fetch('/api/openclaw/version?check=true');
       const data = await res.json();
       if (data.current && data.current !== 'unknown') setCurrentVersion(data.current);
       if (data.latest) setLatestVersion(data.latest);
       setUpdateAvailable(!!data.updateAvailable);
+      if (!data.updateAvailable) {
+        setCheckedNoUpdate(true);
+        setTimeout(() => setCheckedNoUpdate(false), 5000);
+      }
     } catch {
       // silently fail
     } finally {
@@ -83,8 +114,18 @@ export function Header({ workspace }: HeaderProps) {
 
   const triggerUpdate = async () => {
     if (!latestVersion) return;
+    const now = Date.now();
     setUpdateState('queued');
     setUpdateError(null);
+    setUpdateStartedAt(now);
+    setUpdateElapsed(0);
+    // Persist across container restarts
+    try {
+      localStorage.setItem('mc-pending-update', JSON.stringify({
+        targetVersion: latestVersion,
+        startedAt: now,
+      }));
+    } catch { /* ignore */ }
     try {
       const res = await fetch('/api/openclaw/update', {
         method: 'POST',
@@ -96,8 +137,18 @@ export function Header({ workspace }: HeaderProps) {
     } catch {
       setUpdateState('failed');
       setUpdateError('Failed to create update request');
+      localStorage.removeItem('mc-pending-update');
     }
   };
+
+  // Elapsed timer during update
+  useEffect(() => {
+    if (updateState !== 'queued' || !updateStartedAt) return;
+    const tick = setInterval(() => {
+      setUpdateElapsed(Math.floor((Date.now() - updateStartedAt) / 1000));
+    }, 1000);
+    return () => clearInterval(tick);
+  }, [updateState, updateStartedAt]);
 
   // Poll escalation result when update is queued
   useEffect(() => {
@@ -108,9 +159,9 @@ export function Header({ workspace }: HeaderProps) {
         const res = await fetch(`/api/openclaw/update/status?file=${encodeURIComponent(escalationFile)}`);
         const data = await res.json();
         if (!data.pending) {
+          localStorage.removeItem('mc-pending-update');
           if (data.success) {
             setUpdateState('success');
-            // Auto-dismiss after 30s
             setTimeout(() => {
               setUpdateState('idle');
               setUpdateAvailable(false);
@@ -122,22 +173,34 @@ export function Header({ workspace }: HeaderProps) {
           }
         }
       } catch {
-        // keep polling
+        // Connection lost = container probably restarting (expected during update)
       }
     };
 
     const interval = setInterval(poll, 15000);
-    poll(); // check immediately
-    // Stop polling after 10 minutes
+    poll();
     const timeout = setTimeout(() => {
       clearInterval(interval);
-      if (updateState === 'queued') {
-        setUpdateState('failed');
-        setUpdateError('Timed out waiting for host watcher');
-      }
+      // Don't fail — localStorage will catch it on reconnect
     }, 600000);
     return () => { clearInterval(interval); clearTimeout(timeout); };
   }, [updateState, escalationFile]);
+
+  // Phase estimate based on elapsed time
+  const getUpdatePhase = (elapsed: number): string => {
+    if (elapsed < 10) return 'Escalation queued';
+    if (elapsed < 300) return 'Waiting for host watcher';
+    if (elapsed < 360) return 'Pulling image';
+    if (elapsed < 420) return 'Restarting container';
+    if (elapsed < 480) return 'Running bootstrap';
+    return 'Finalizing';
+  };
+
+  const formatElapsed = (secs: number): string => {
+    const m = Math.floor(secs / 60);
+    const s = secs % 60;
+    return m > 0 ? `${m}m ${s}s` : `${s}s`;
+  };
 
   const workingAgents = agents.filter((a) => a.status === 'working').length;
   const activeAgents = workingAgents + activeSubAgents;
@@ -255,13 +318,13 @@ export function Header({ workspace }: HeaderProps) {
               v{currentVersion}
             </span>
             {updateState === 'success' ? (
-              <span className="flex items-center gap-1 text-xs font-medium text-mc-accent-green">
+              <span className="flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-mc-accent-green/20 border border-mc-accent-green text-mc-accent-green">
                 <CheckCircle className="w-3.5 h-3.5" />
-                Updated
+                Updated to v{currentVersion}
               </span>
             ) : updateState === 'failed' ? (
               <button
-                onClick={() => { setUpdateState('idle'); setUpdateError(null); }}
+                onClick={() => { setUpdateState('idle'); setUpdateError(null); localStorage.removeItem('mc-pending-update'); }}
                 className="flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-mc-accent-red/20 border border-mc-accent-red text-mc-accent-red hover:bg-mc-accent-red/30 transition-colors"
                 title={updateError || 'Update failed — click to dismiss'}
               >
@@ -269,9 +332,13 @@ export function Header({ workspace }: HeaderProps) {
                 Failed
               </button>
             ) : updateState === 'queued' ? (
-              <span className="flex items-center gap-1 text-xs text-mc-accent-cyan animate-pulse">
+              <span
+                className="flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-medium bg-mc-accent-cyan/10 border border-mc-accent-cyan/30 text-mc-accent-cyan"
+                title={`${getUpdatePhase(updateElapsed)} — container will restart, page will reconnect`}
+              >
                 <RefreshCw className="w-3 h-3 animate-spin" />
-                Updating...
+                <span>{getUpdatePhase(updateElapsed)}</span>
+                <span className="font-mono opacity-70">{formatElapsed(updateElapsed)}</span>
               </span>
             ) : updateAvailable && latestVersion ? (
               <button
@@ -282,6 +349,11 @@ export function Header({ workspace }: HeaderProps) {
                 <Download className="w-3 h-3" />
                 v{latestVersion}
               </button>
+            ) : checkedNoUpdate ? (
+              <span className="flex items-center gap-1 text-xs text-mc-accent-green">
+                <CheckCircle className="w-3 h-3" />
+                Latest
+              </span>
             ) : (
               <button
                 onClick={checkForUpdates}

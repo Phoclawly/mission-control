@@ -296,6 +296,202 @@ export interface AgentWithOpenClaw extends Agent {
   openclawSession?: OpenClawSession | null;
 }
 
+// ─── Capabilities & Integrations types ──────────────────────────────────────
+
+export type CapabilityCategory =
+  | 'browser_automation'
+  | 'mcp_server'
+  | 'cli_tool'
+  | 'api_integration'
+  | 'skill'
+  | 'workflow'
+  | 'credential_provider';
+
+export type CapabilityStatus = 'healthy' | 'degraded' | 'broken' | 'unknown' | 'disabled';
+
+export interface Capability {
+  id: string;
+  name: string;
+  category: CapabilityCategory;
+  description?: string;
+  provider?: string;
+  version?: string;
+  install_path?: string;
+  config_ref?: string;
+  is_shared: boolean;
+  status: CapabilityStatus;
+  last_health_check?: string;
+  health_message?: string;
+  metadata?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AgentCapability {
+  agent_id: string;
+  capability_id: string;
+  enabled: boolean;
+  config_override?: string;
+  // Joined fields
+  capability?: Capability;
+  agent?: Agent;
+}
+
+export type IntegrationType =
+  | 'mcp_plugin'
+  | 'oauth_token'
+  | 'api_key'
+  | 'cli_auth'
+  | 'browser_profile'
+  | 'cron_job'
+  | 'webhook';
+
+export type IntegrationStatus = 'connected' | 'expired' | 'broken' | 'unconfigured' | 'unknown';
+
+export interface Integration {
+  id: string;
+  name: string;
+  type: IntegrationType;
+  provider?: string;
+  status: IntegrationStatus;
+  credential_source?: string;
+  last_validated?: string;
+  validation_message?: string;
+  config?: string;
+  metadata?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export type HealthCheckStatus = 'pass' | 'fail' | 'warn' | 'skip';
+
+export interface HealthCheck {
+  id: string;
+  target_type: 'capability' | 'integration';
+  target_id: string;
+  status: HealthCheckStatus;
+  message?: string;
+  duration_ms?: number;
+  checked_at: string;
+  // Joined fields
+  target_name?: string;
+}
+
+export type CronJobType = 'lobster' | 'shell' | 'llm';
+export type CronJobStatus = 'active' | 'disabled' | 'stale';
+
+export interface CronJob {
+  id: string;
+  name: string;
+  schedule: string;
+  command: string;
+  agent_id?: string;
+  type: CronJobType;
+  status: CronJobStatus;
+  last_run?: string;
+  last_result?: string;
+  last_duration_ms?: number;
+  error_count: number;
+  description?: string;
+  created_at: string;
+  updated_at: string;
+  // Joined fields
+  agent_name?: string;
+}
+
+export interface AgentMemoryEntry {
+  id: string;
+  agent_id: string;
+  date: string;
+  file_path: string;
+  file_size_bytes: number;
+  summary?: string;
+  entry_count: number;
+  created_at: string;
+}
+
+export interface CapabilitiesOverview {
+  capabilities: {
+    total: number;
+    byCategory: Record<string, number>;
+    byStatus: Record<string, number>;
+  };
+  integrations: {
+    total: number;
+    byStatus: Record<string, number>;
+  };
+  agents: {
+    id: string;
+    name: string;
+    capabilityCount: number;
+    uniqueCapabilities: number;
+    cronCount: number;
+    latestMemory?: string;
+  }[];
+  alerts: {
+    type: string;
+    target: string;
+    message: string;
+  }[];
+  cronSummary: {
+    active: number;
+    disabled: number;
+    stale: number;
+  };
+  lastFullCheck?: string;
+}
+
+// API request types for capabilities system
+export interface CreateCapabilityRequest {
+  name: string;
+  category: CapabilityCategory;
+  description?: string;
+  provider?: string;
+  version?: string;
+  install_path?: string;
+  config_ref?: string;
+  is_shared?: boolean;
+  status?: CapabilityStatus;
+  metadata?: string;
+}
+
+export interface UpdateCapabilityRequest extends Partial<CreateCapabilityRequest> {
+  health_message?: string;
+  last_health_check?: string;
+}
+
+export interface CreateIntegrationRequest {
+  name: string;
+  type: IntegrationType;
+  provider?: string;
+  status?: IntegrationStatus;
+  credential_source?: string;
+  config?: string;
+  metadata?: string;
+}
+
+export interface UpdateIntegrationRequest extends Partial<CreateIntegrationRequest> {
+  validation_message?: string;
+  last_validated?: string;
+}
+
+export interface CreateCronJobRequest {
+  name: string;
+  schedule: string;
+  command: string;
+  agent_id?: string;
+  type?: CronJobType;
+  status?: CronJobStatus;
+  description?: string;
+}
+
+export interface UpdateCronJobRequest extends Partial<CreateCronJobRequest> {
+  last_run?: string;
+  last_result?: string;
+  last_duration_ms?: number;
+  error_count?: number;
+}
+
 // Real-time SSE event types
 export type SSEEventType =
   | 'task_updated'
@@ -304,11 +500,14 @@ export type SSEEventType =
   | 'activity_logged'
   | 'deliverable_added'
   | 'agent_spawned'
-  | 'agent_completed';
+  | 'agent_completed'
+  | 'capability_updated'
+  | 'integration_updated'
+  | 'health_check_completed';
 
 export interface SSEEvent {
   type: SSEEventType;
-  payload: Task | TaskActivity | TaskDeliverable | {
+  payload: Task | TaskActivity | TaskDeliverable | Capability | Integration | HealthCheck | {
     taskId: string;
     sessionId: string;
     agentName?: string;

@@ -174,6 +174,92 @@ CREATE TABLE IF NOT EXISTS task_deliverables (
   created_at TEXT DEFAULT (datetime('now'))
 );
 
+-- Capabilities registry (tools, skills, MCP servers, CLI tools, workflows)
+CREATE TABLE IF NOT EXISTS capabilities (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  category TEXT NOT NULL CHECK (category IN ('browser_automation', 'mcp_server', 'cli_tool', 'api_integration', 'skill', 'workflow', 'credential_provider')),
+  description TEXT,
+  provider TEXT,
+  version TEXT,
+  install_path TEXT,
+  config_ref TEXT,
+  is_shared INTEGER DEFAULT 1,
+  status TEXT DEFAULT 'unknown' CHECK (status IN ('healthy', 'degraded', 'broken', 'unknown', 'disabled')),
+  last_health_check TEXT,
+  health_message TEXT,
+  metadata TEXT,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
+);
+
+-- Agent-capability junction table
+CREATE TABLE IF NOT EXISTS agent_capabilities (
+  agent_id TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+  capability_id TEXT NOT NULL REFERENCES capabilities(id) ON DELETE CASCADE,
+  enabled INTEGER DEFAULT 1,
+  config_override TEXT,
+  PRIMARY KEY (agent_id, capability_id)
+);
+
+-- External service integrations (Notion, Slack, Google Sheets, 1Password)
+CREATE TABLE IF NOT EXISTS integrations (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  type TEXT NOT NULL CHECK (type IN ('mcp_plugin', 'oauth_token', 'api_key', 'cli_auth', 'browser_profile', 'cron_job', 'webhook')),
+  provider TEXT,
+  status TEXT DEFAULT 'unknown' CHECK (status IN ('connected', 'expired', 'broken', 'unconfigured', 'unknown')),
+  credential_source TEXT,
+  last_validated TEXT,
+  validation_message TEXT,
+  config TEXT,
+  metadata TEXT,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
+);
+
+-- Health check history log
+CREATE TABLE IF NOT EXISTS health_checks (
+  id TEXT PRIMARY KEY,
+  target_type TEXT NOT NULL CHECK (target_type IN ('capability', 'integration')),
+  target_id TEXT NOT NULL,
+  status TEXT NOT NULL CHECK (status IN ('pass', 'fail', 'warn', 'skip')),
+  message TEXT,
+  duration_ms INTEGER,
+  checked_at TEXT DEFAULT (datetime('now'))
+);
+
+-- Cron jobs registry with per-agent assignment
+CREATE TABLE IF NOT EXISTS cron_jobs (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  schedule TEXT NOT NULL,
+  command TEXT NOT NULL,
+  agent_id TEXT REFERENCES agents(id) ON DELETE SET NULL,
+  type TEXT DEFAULT 'shell' CHECK (type IN ('lobster', 'shell', 'llm')),
+  status TEXT DEFAULT 'active' CHECK (status IN ('active', 'disabled', 'stale')),
+  last_run TEXT,
+  last_result TEXT,
+  last_duration_ms INTEGER,
+  error_count INTEGER DEFAULT 0,
+  description TEXT,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
+);
+
+-- Agent memory file index for browsing
+CREATE TABLE IF NOT EXISTS agent_memory_index (
+  id TEXT PRIMARY KEY,
+  agent_id TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+  date TEXT NOT NULL,
+  file_path TEXT NOT NULL,
+  file_size_bytes INTEGER DEFAULT 0,
+  summary TEXT,
+  entry_count INTEGER DEFAULT 0,
+  created_at TEXT DEFAULT (datetime('now')),
+  UNIQUE(agent_id, date)
+);
+
 -- Indexes for performance
 CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
 CREATE INDEX IF NOT EXISTS idx_tasks_assigned ON tasks(assigned_agent_id);
@@ -188,4 +274,14 @@ CREATE INDEX IF NOT EXISTS idx_activities_task ON task_activities(task_id, creat
 CREATE INDEX IF NOT EXISTS idx_deliverables_task ON task_deliverables(task_id);
 CREATE INDEX IF NOT EXISTS idx_openclaw_sessions_task ON openclaw_sessions(task_id);
 CREATE INDEX IF NOT EXISTS idx_planning_questions_task ON planning_questions(task_id, sort_order);
+CREATE INDEX IF NOT EXISTS idx_capabilities_category ON capabilities(category);
+CREATE INDEX IF NOT EXISTS idx_capabilities_status ON capabilities(status);
+CREATE INDEX IF NOT EXISTS idx_agent_capabilities_agent ON agent_capabilities(agent_id);
+CREATE INDEX IF NOT EXISTS idx_agent_capabilities_capability ON agent_capabilities(capability_id);
+CREATE INDEX IF NOT EXISTS idx_integrations_status ON integrations(status);
+CREATE INDEX IF NOT EXISTS idx_health_checks_target ON health_checks(target_type, target_id);
+CREATE INDEX IF NOT EXISTS idx_health_checks_checked ON health_checks(checked_at DESC);
+CREATE INDEX IF NOT EXISTS idx_cron_jobs_agent ON cron_jobs(agent_id);
+CREATE INDEX IF NOT EXISTS idx_cron_jobs_status ON cron_jobs(status);
+CREATE INDEX IF NOT EXISTS idx_agent_memory_agent_date ON agent_memory_index(agent_id, date DESC);
 `;

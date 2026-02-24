@@ -73,8 +73,107 @@ export const CreateDeliverableSchema = z.object({
   description: z.string().optional(),
 });
 
+// ─── Capabilities system validation ──────────────────────────────────────────
+
+const CapabilityCategory = z.enum([
+  'browser_automation', 'mcp_server', 'cli_tool', 'api_integration',
+  'skill', 'workflow', 'credential_provider'
+]);
+
+const CapabilityStatus = z.enum(['healthy', 'degraded', 'broken', 'unknown', 'disabled']);
+
+const IntegrationType = z.enum([
+  'mcp_plugin', 'oauth_token', 'api_key', 'cli_auth',
+  'browser_profile', 'cron_job', 'webhook'
+]);
+
+const IntegrationStatus = z.enum(['connected', 'expired', 'broken', 'unconfigured', 'unknown']);
+
+const CronJobType = z.enum(['lobster', 'shell', 'llm']);
+const CronJobStatus = z.enum(['active', 'disabled', 'stale']);
+
+export const CreateCapabilitySchema = z.object({
+  name: z.string().min(1, 'Name is required').max(200),
+  category: CapabilityCategory,
+  description: z.string().max(2000).optional(),
+  provider: z.string().max(200).optional(),
+  version: z.string().max(50).optional(),
+  install_path: z.string().max(500).optional(),
+  config_ref: z.string().max(500).optional(),
+  is_shared: z.boolean().optional(),
+  status: CapabilityStatus.optional(),
+  metadata: z.string().optional(),
+});
+
+export const UpdateCapabilitySchema = z.object({
+  name: z.string().min(1).max(200).optional(),
+  category: CapabilityCategory.optional(),
+  description: z.string().max(2000).optional(),
+  provider: z.string().max(200).optional(),
+  version: z.string().max(50).optional(),
+  install_path: z.string().max(500).optional(),
+  config_ref: z.string().max(500).optional(),
+  is_shared: z.boolean().optional(),
+  status: CapabilityStatus.optional(),
+  health_message: z.string().max(1000).optional(),
+  last_health_check: z.string().optional(),
+  metadata: z.string().optional(),
+});
+
+export const CreateIntegrationSchema = z.object({
+  name: z.string().min(1, 'Name is required').max(200),
+  type: IntegrationType,
+  provider: z.string().max(200).optional(),
+  status: IntegrationStatus.optional(),
+  credential_source: z.string().max(500).optional(),
+  config: z.string().optional(),
+  metadata: z.string().optional(),
+});
+
+export const UpdateIntegrationSchema = z.object({
+  name: z.string().min(1).max(200).optional(),
+  type: IntegrationType.optional(),
+  provider: z.string().max(200).optional(),
+  status: IntegrationStatus.optional(),
+  credential_source: z.string().max(500).optional(),
+  validation_message: z.string().max(1000).optional(),
+  last_validated: z.string().optional(),
+  config: z.string().optional(),
+  metadata: z.string().optional(),
+});
+
+export const CreateCronJobSchema = z.object({
+  name: z.string().min(1, 'Name is required').max(200),
+  schedule: z.string().min(1, 'Schedule is required').max(100),
+  command: z.string().min(1, 'Command is required').max(2000),
+  agent_id: z.string().optional(),
+  type: CronJobType.optional(),
+  status: CronJobStatus.optional(),
+  description: z.string().max(1000).optional(),
+});
+
+export const UpdateCronJobSchema = z.object({
+  name: z.string().min(1).max(200).optional(),
+  schedule: z.string().min(1).max(100).optional(),
+  command: z.string().min(1).max(2000).optional(),
+  agent_id: z.union([z.string(), z.null()]).optional(),
+  type: CronJobType.optional(),
+  status: CronJobStatus.optional(),
+  description: z.string().max(1000).optional(),
+  last_run: z.string().optional(),
+  last_result: z.string().max(5000).optional(),
+  last_duration_ms: z.number().int().min(0).optional(),
+  error_count: z.number().int().min(0).optional(),
+});
+
 // Type exports for use in routes
 export type CreateTaskInput = z.infer<typeof CreateTaskSchema>;
 export type UpdateTaskInput = z.infer<typeof UpdateTaskSchema>;
 export type CreateActivityInput = z.infer<typeof CreateActivitySchema>;
 export type CreateDeliverableInput = z.infer<typeof CreateDeliverableSchema>;
+export type CreateCapabilityInput = z.infer<typeof CreateCapabilitySchema>;
+export type UpdateCapabilityInput = z.infer<typeof UpdateCapabilitySchema>;
+export type CreateIntegrationInput = z.infer<typeof CreateIntegrationSchema>;
+export type UpdateIntegrationInput = z.infer<typeof UpdateIntegrationSchema>;
+export type CreateCronJobInput = z.infer<typeof CreateCronJobSchema>;
+export type UpdateCronJobInput = z.infer<typeof UpdateCronJobSchema>;

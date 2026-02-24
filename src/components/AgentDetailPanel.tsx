@@ -1,10 +1,10 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { X, Edit, Clock, CheckCircle, Activity, FileText } from 'lucide-react';
+import { X, Edit, Clock, CheckCircle, Activity, FileText, Shield, Power } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { formatDistanceToNow } from 'date-fns';
-import type { Agent, TaskActivity, OpenClawSession } from '@/lib/types';
+import type { Agent, TaskActivity, OpenClawSession, Capability, CronJob } from '@/lib/types';
 
 interface AgentDetailPanelProps {
   agentId: string;
@@ -18,6 +18,8 @@ const tabs = [
   { id: 'tools', label: 'TOOLS.md' },
   { id: 'user', label: 'USER.md' },
   { id: 'agents', label: 'AGENTS.md' },
+  { id: 'capabilities', label: 'Capabilities' },
+  { id: 'crons', label: 'Crons' },
 ] as const;
 
 type TabId = typeof tabs[number]['id'];
@@ -42,6 +44,10 @@ export function AgentDetailPanel({ agentId, onClose, onEdit }: AgentDetailPanelP
   const [activeSession, setActiveSession] = useState<OpenClawSession | null>(null);
   const [recentActivity, setRecentActivity] = useState<TaskActivity[]>([]);
   const [loading, setLoading] = useState(true);
+  const [agentCapabilities, setAgentCapabilities] = useState<Capability[]>([]);
+  const [agentCrons, setAgentCrons] = useState<CronJob[]>([]);
+  const [capsLoading, setCapsLoading] = useState(false);
+  const [cronsLoading, setCronsLoading] = useState(false);
 
   // Fetch data on mount/agentId change
   useEffect(() => {
@@ -65,6 +71,48 @@ export function AgentDetailPanel({ agentId, onClose, onEdit }: AgentDetailPanelP
     loadDetail();
     setActiveTab('overview'); // Reset tab when switching agents
   }, [agentId]);
+
+  // Fetch capabilities when tab is selected
+  useEffect(() => {
+    if (activeTab !== 'capabilities' || !agentId) return;
+    setCapsLoading(true);
+    (async () => {
+      try {
+        const res = await fetch(`/api/agents/${agentId}/capabilities`);
+        if (res.ok) {
+          const data = await res.json();
+          // data may be AgentCapability[] with nested capability, or Capability[]
+          const caps: Capability[] = data.map((item: { capability?: Capability } & Capability) =>
+            item.capability ? item.capability : item
+          );
+          setAgentCapabilities(caps);
+        }
+      } catch (error) {
+        console.error('Failed to load agent capabilities:', error);
+      } finally {
+        setCapsLoading(false);
+      }
+    })();
+  }, [activeTab, agentId]);
+
+  // Fetch crons when tab is selected
+  useEffect(() => {
+    if (activeTab !== 'crons' || !agentId) return;
+    setCronsLoading(true);
+    (async () => {
+      try {
+        const res = await fetch(`/api/agents/${agentId}/crons`);
+        if (res.ok) {
+          const data = await res.json();
+          setAgentCrons(data);
+        }
+      } catch (error) {
+        console.error('Failed to load agent crons:', error);
+      } finally {
+        setCronsLoading(false);
+      }
+    })();
+  }, [activeTab, agentId]);
 
   if (loading) {
     return (
@@ -219,6 +267,100 @@ export function AgentDetailPanel({ agentId, onClose, onEdit }: AgentDetailPanelP
     );
   };
 
+  const renderCapabilitiesTab = () => {
+    if (capsLoading) {
+      return (
+        <div className="text-center py-8">
+          <Shield className="w-6 h-6 mx-auto mb-2 text-mc-text-secondary animate-pulse" />
+          <p className="text-sm text-mc-text-secondary">Loading capabilities...</p>
+        </div>
+      );
+    }
+    if (agentCapabilities.length === 0) {
+      return (
+        <div className="text-center py-8">
+          <Shield className="w-8 h-8 mx-auto mb-2 text-mc-text-secondary opacity-50" />
+          <p className="text-mc-text-secondary">No capabilities assigned</p>
+        </div>
+      );
+    }
+    return (
+      <div className="space-y-2">
+        {agentCapabilities.map((cap) => {
+          const statusClasses: Record<string, string> = {
+            healthy: 'bg-mc-accent-green/20 text-mc-accent-green border-mc-accent-green/30',
+            broken: 'bg-mc-accent-red/20 text-mc-accent-red border-mc-accent-red/30',
+            degraded: 'bg-mc-accent-yellow/20 text-mc-accent-yellow border-mc-accent-yellow/30',
+            unknown: 'bg-mc-bg-tertiary text-mc-text-secondary border-mc-border',
+            disabled: 'bg-mc-bg-tertiary text-mc-text-secondary border-mc-border',
+          };
+          return (
+            <div key={cap.id} className="flex items-center justify-between p-3 bg-mc-bg rounded border border-mc-border/50">
+              <div>
+                <span className="text-sm font-medium text-mc-text">{cap.name}</span>
+                {cap.category && (
+                  <span className="ml-2 text-xs text-mc-text-secondary">{cap.category.replace(/_/g, ' ')}</span>
+                )}
+              </div>
+              <span className={`text-xs px-2 py-0.5 rounded-full border ${statusClasses[cap.status] ?? statusClasses.unknown}`}>
+                {cap.status}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
+  const renderCronsTab = () => {
+    if (cronsLoading) {
+      return (
+        <div className="text-center py-8">
+          <Clock className="w-6 h-6 mx-auto mb-2 text-mc-text-secondary animate-pulse" />
+          <p className="text-sm text-mc-text-secondary">Loading cron jobs...</p>
+        </div>
+      );
+    }
+    if (agentCrons.length === 0) {
+      return (
+        <div className="text-center py-8">
+          <Clock className="w-8 h-8 mx-auto mb-2 text-mc-text-secondary opacity-50" />
+          <p className="text-mc-text-secondary">No cron jobs assigned</p>
+        </div>
+      );
+    }
+    return (
+      <div className="space-y-2">
+        {agentCrons.map((cron) => {
+          const cronStatusClasses: Record<string, string> = {
+            active: 'bg-mc-accent-green/20 text-mc-accent-green border-mc-accent-green/30',
+            disabled: 'bg-mc-bg-tertiary text-mc-text-secondary border-mc-border',
+            stale: 'bg-mc-accent-yellow/20 text-mc-accent-yellow border-mc-accent-yellow/30',
+          };
+          return (
+            <div key={cron.id} className="p-3 bg-mc-bg rounded border border-mc-border/50">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-sm font-medium text-mc-text">{cron.name}</span>
+                <span className={`text-xs px-2 py-0.5 rounded-full border ${cronStatusClasses[cron.status] ?? cronStatusClasses.disabled}`}>
+                  {cron.status}
+                </span>
+              </div>
+              <div className="flex items-center gap-3 text-xs text-mc-text-secondary">
+                <span className="font-mono">{cron.schedule}</span>
+                {cron.last_run && (
+                  <span>Last: {formatDistanceToNow(new Date(cron.last_run), { addSuffix: true })}</span>
+                )}
+              </div>
+              {cron.description && (
+                <p className="text-xs text-mc-text-secondary mt-1">{cron.description}</p>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
   return (
     <div className="w-[500px] border-l border-mc-border bg-mc-bg-secondary flex flex-col h-full overflow-hidden">
       {/* Header */}
@@ -263,7 +405,10 @@ export function AgentDetailPanel({ agentId, onClose, onEdit }: AgentDetailPanelP
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-4">
-        {activeTab === 'overview' ? renderOverviewTab() : renderMarkdownTab()}
+        {activeTab === 'overview' && renderOverviewTab()}
+        {activeTab === 'capabilities' && renderCapabilitiesTab()}
+        {activeTab === 'crons' && renderCronsTab()}
+        {activeTab !== 'overview' && activeTab !== 'capabilities' && activeTab !== 'crons' && renderMarkdownTab()}
       </div>
     </div>
   );

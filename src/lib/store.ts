@@ -2,7 +2,7 @@
 
 import { create } from 'zustand';
 import { debug } from './debug';
-import type { Agent, Task, Conversation, Message, Event, TaskStatus, OpenClawSession } from './types';
+import type { Agent, Task, Conversation, Message, Event, TaskStatus, OpenClawSession, Capability, Integration, CronJob } from './types';
 
 interface MissionControlState {
   // Data
@@ -52,6 +52,16 @@ interface MissionControlState {
   setAgentOpenClawSession: (agentId: string, session: OpenClawSession | null) => void;
   setOpenclawMessages: (messages: Message[]) => void;
   addOpenclawMessage: (message: Message) => void;
+
+  // Capabilities system
+  capabilities: Capability[];
+  integrations: Integration[];
+  cronJobs: CronJob[];
+  setCapabilities: (caps: Capability[]) => void;
+  setIntegrations: (integs: Integration[]) => void;
+  setCronJobs: (crons: CronJob[]) => void;
+  updateCapability: (cap: Capability) => void;
+  updateIntegration: (integ: Integration) => void;
 }
 
 export const useMissionControl = create<MissionControlState>((set) => ({
@@ -154,4 +164,24 @@ export const useMissionControl = create<MissionControlState>((set) => ({
   setOpenclawMessages: (messages) => set({ openclawMessages: messages }),
   addOpenclawMessage: (message) =>
     set((state) => ({ openclawMessages: [...state.openclawMessages, message] })),
+
+  // Capabilities system
+  capabilities: [],
+  integrations: [],
+  cronJobs: [],
+  setCapabilities: (caps) => set({ capabilities: caps }),
+  setIntegrations: (integs) => set({ integrations: integs }),
+  setCronJobs: (crons) => set({ cronJobs: crons }),
+  updateCapability: (cap) =>
+    set((state) => ({
+      capabilities: state.capabilities.map((c) =>
+        c.id === cap.id ? cap : c
+      ),
+    })),
+  updateIntegration: (integ) =>
+    set((state) => ({
+      integrations: state.integrations.map((i) =>
+        i.id === integ.id ? integ : i
+      ),
+    })),
 }));

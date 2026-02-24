@@ -50,11 +50,35 @@ export async function GET(
       [id]
     );
 
+    // Capability count for this agent
+    const capRow = queryOne<{ count: number }>(
+      'SELECT COUNT(*) as count FROM agent_capabilities WHERE agent_id = ?',
+      [id]
+    );
+    const capabilityCount = capRow?.count ?? 0;
+
+    // Cron job count for this agent
+    const cronRow = queryOne<{ count: number }>(
+      'SELECT COUNT(*) as count FROM cron_jobs WHERE agent_id = ?',
+      [id]
+    );
+    const cronCount = cronRow?.count ?? 0;
+
+    // Latest memory date for this agent
+    const memRow = queryOne<{ latest: string | null }>(
+      'SELECT MAX(date) as latest FROM agent_memory_index WHERE agent_id = ?',
+      [id]
+    );
+    const latestMemory = memRow?.latest ?? null;
+
     return NextResponse.json({
       agent,
       stats,
       activeSession,
       recentActivity,
+      capabilityCount,
+      cronCount,
+      latestMemory,
     });
   } catch (error) {
     console.error('Failed to fetch agent detail:', error);

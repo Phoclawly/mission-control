@@ -215,6 +215,14 @@ export async function PATCH(
       updates.push('source = ?');
       values.push(validatedData.source);
     }
+    if (validatedData.task_type !== undefined) {
+      updates.push('task_type = ?');
+      values.push(validatedData.task_type);
+    }
+    if (validatedData.task_type_config !== undefined) {
+      updates.push('task_type_config = ?');
+      values.push(validatedData.task_type_config !== null ? JSON.stringify(validatedData.task_type_config) : null);
+    }
 
     // Track if we need to dispatch task
     let shouldDispatch = false;

@@ -380,6 +380,33 @@ const migrations: Migration[] = [
 
       console.log('[Migration 011] All new tables created');
     }
+  },
+  {
+    id: '012',
+    name: 'fix_integrations_type_constraint',
+    up(db: Database.Database) {
+      console.log('[Migration 012] Adding credential_provider to integrations type constraint...');
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS integrations_new (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          type TEXT NOT NULL CHECK (type IN ('mcp_plugin', 'oauth_token', 'api_key', 'cli_auth', 'browser_profile', 'cron_job', 'webhook', 'credential_provider')),
+          provider TEXT,
+          status TEXT DEFAULT 'unknown' CHECK (status IN ('connected', 'expired', 'broken', 'unconfigured', 'unknown')),
+          credential_source TEXT,
+          last_validated TEXT,
+          validation_message TEXT,
+          config TEXT,
+          metadata TEXT,
+          created_at TEXT DEFAULT (datetime('now')),
+          updated_at TEXT DEFAULT (datetime('now'))
+        );
+        INSERT OR IGNORE INTO integrations_new SELECT * FROM integrations;
+        DROP TABLE integrations;
+        ALTER TABLE integrations_new RENAME TO integrations;
+      `);
+      console.log('[Migration 012] integrations table updated with credential_provider type');
+    }
   }
 ];
 

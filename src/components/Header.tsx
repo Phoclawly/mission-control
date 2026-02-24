@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
-import { Zap, Settings, ChevronLeft, LayoutGrid, Users, Shield, BookOpen } from 'lucide-react';
+import { Zap, Settings, ChevronLeft, LayoutGrid, Users, Shield, BookOpen, RefreshCw, Download, CheckCircle, XCircle } from 'lucide-react';
 import { useMissionControl } from '@/lib/store';
 import { format } from 'date-fns';
 import type { Workspace } from '@/lib/types';
@@ -18,6 +18,15 @@ export function Header({ workspace }: HeaderProps) {
   const { agents, tasks, isOnline } = useMissionControl();
   const [currentTime, setCurrentTime] = useState(new Date());
   const [activeSubAgents, setActiveSubAgents] = useState(0);
+
+  // Version & update state
+  const [currentVersion, setCurrentVersion] = useState<string | null>(null);
+  const [latestVersion, setLatestVersion] = useState<string | null>(null);
+  const [updateAvailable, setUpdateAvailable] = useState(false);
+  const [versionChecking, setVersionChecking] = useState(false);
+  const [updateState, setUpdateState] = useState<'idle' | 'queued' | 'success' | 'failed'>('idle');
+  const [updateError, setUpdateError] = useState<string | null>(null);
+  const [escalationFile, setEscalationFile] = useState<string | null>(null);
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
@@ -44,6 +53,91 @@ export function Header({ workspace }: HeaderProps) {
     const interval = setInterval(loadSubAgentCount, 30000);
     return () => clearInterval(interval);
   }, []);
+
+  // Load current version on mount
+  useEffect(() => {
+    fetch('/api/openclaw/version')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.current && data.current !== 'unknown') {
+          setCurrentVersion(data.current);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const checkForUpdates = async () => {
+    setVersionChecking(true);
+    try {
+      const res = await fetch('/api/openclaw/version?check=true');
+      const data = await res.json();
+      if (data.current && data.current !== 'unknown') setCurrentVersion(data.current);
+      if (data.latest) setLatestVersion(data.latest);
+      setUpdateAvailable(!!data.updateAvailable);
+    } catch {
+      // silently fail
+    } finally {
+      setVersionChecking(false);
+    }
+  };
+
+  const triggerUpdate = async () => {
+    if (!latestVersion) return;
+    setUpdateState('queued');
+    setUpdateError(null);
+    try {
+      const res = await fetch('/api/openclaw/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ version: latestVersion }),
+      });
+      const data = await res.json();
+      if (data.escalation) setEscalationFile(data.escalation);
+    } catch {
+      setUpdateState('failed');
+      setUpdateError('Failed to create update request');
+    }
+  };
+
+  // Poll escalation result when update is queued
+  useEffect(() => {
+    if (updateState !== 'queued' || !escalationFile) return;
+
+    const poll = async () => {
+      try {
+        const res = await fetch(`/api/openclaw/update/status?file=${encodeURIComponent(escalationFile)}`);
+        const data = await res.json();
+        if (!data.pending) {
+          if (data.success) {
+            setUpdateState('success');
+            // Auto-dismiss after 30s
+            setTimeout(() => {
+              setUpdateState('idle');
+              setUpdateAvailable(false);
+              setEscalationFile(null);
+            }, 30000);
+          } else {
+            setUpdateState('failed');
+            setUpdateError(data.error || 'Update failed');
+          }
+        }
+      } catch {
+        // keep polling
+      }
+    };
+
+    const interval = setInterval(poll, 15000);
+    poll(); // check immediately
+    // Stop polling after 10 minutes
+    const timeout = setTimeout(() => {
+      clearInterval(interval);
+      if (updateState === 'queued') {
+        setUpdateState('failed');
+        setUpdateError('Timed out waiting for host watcher');
+      }
+    }, 600000);
+    return () => { clearInterval(interval); clearTimeout(timeout); };
+  }, [updateState, escalationFile]);
 
   const workingAgents = agents.filter((a) => a.status === 'working').length;
   const activeAgents = workingAgents + activeSubAgents;
@@ -153,6 +247,41 @@ export function Header({ workspace }: HeaderProps) {
           />
           {isOnline ? 'ONLINE' : 'OFFLINE'}
         </div>
+
+        {/* Version & Update */}
+        {currentVersion && (
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs font-mono text-mc-text-secondary">
+              v{currentVersion}
+            </span>
+            {updateAvailable && latestVersion ? (
+              updateRequested ? (
+                <span className="text-xs text-mc-accent-cyan animate-pulse">
+                  Queued
+                </span>
+              ) : (
+                <button
+                  onClick={triggerUpdate}
+                  className="flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-mc-accent-cyan/20 border border-mc-accent-cyan text-mc-accent-cyan hover:bg-mc-accent-cyan/30 transition-colors"
+                  title={`Update to v${latestVersion}`}
+                >
+                  <Download className="w-3 h-3" />
+                  v{latestVersion}
+                </button>
+              )
+            ) : (
+              <button
+                onClick={checkForUpdates}
+                disabled={versionChecking}
+                className="p-1 rounded text-mc-text-secondary hover:text-mc-text hover:bg-mc-bg-tertiary transition-colors disabled:opacity-50"
+                title="Check for updates"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${versionChecking ? 'animate-spin' : ''}`} />
+              </button>
+            )}
+          </div>
+        )}
+
         <button
           onClick={() => router.push('/settings')}
           className="p-2 hover:bg-mc-bg-tertiary rounded text-mc-text-secondary"

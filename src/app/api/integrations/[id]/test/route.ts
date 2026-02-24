@@ -1,3 +1,41 @@
+/**
+ * POST /api/integrations/[id]/test — Test an integration's connection
+ *
+ * Architecture:
+ *   1. Fetch integration from DB
+ *   2. Resolve credential via credential_source pattern (see below)
+ *   3. Validate credential against provider API (provider-specific)
+ *   4. Record health_check row + update integration status
+ *   5. Broadcast SSE events (health_check_completed, integration_updated)
+ *   6. Return updated integration object
+ *
+ * Credential source patterns:
+ *   .env:VAR_NAME              → process.env[VAR_NAME]
+ *   1password:Vault/Item       → `op read` or `op item get` (tries credential/password/api_key/secret/token)
+ *   openclaw.json:KEY          → reads ~/.openclaw/openclaw.json env.vars[KEY], falls back to process.env
+ *   gog:OAuth2                 → `gog auth list` CLI check
+ *   built-in                   → always pass (gateway-managed webhooks)
+ *   PLAIN_ENV_VAR              → process.env[PLAIN_ENV_VAR]
+ *
+ * Provider validation endpoints:
+ *   anthropic    → POST /v1/messages (minimal request)
+ *   openai       → GET /v1/models
+ *   groq         → GET /openai/v1/models
+ *   xai          → GET /v1/models
+ *   perplexity   → POST /chat/completions (30s timeout)
+ *   firecrawl    → POST /v1/scrape
+ *   brave        → GET /res/v1/web/search
+ *   elevenlabs   → GET /v1/user
+ *   agentmail    → GET /v0/inboxes
+ *   slack        → POST auth.test
+ *   notion       → GET /v1/users/me
+ *   (default)    → credential existence check only
+ *
+ * Special integration types:
+ *   credential_provider (1password) → `op whoami`
+ *   cli_auth (gog:OAuth2)           → `gog auth list`
+ *   webhook (built-in)              → always pass
+ */
 import { NextRequest, NextResponse } from 'next/server';
 import { queryOne, run } from '@/lib/db';
 import { v4 as uuidv4 } from 'uuid';
@@ -47,6 +85,36 @@ function resolveCredential(credentialSource: string): { value: string | null; me
   // 1password:Vault/Item pattern — try common field names until one works
   if (credentialSource.startsWith('1password:')) {
     const itemPath = credentialSource.slice(10);
+    // Check for special chars that break `op read` (parentheses, etc.)
+    const hasSpecialChars = /[()[\]{}]/.test(itemPath);
+
+    if (hasSpecialChars) {
+      // Use `op item get` with --format json and parse fields
+      const parts = itemPath.split('/');
+      const vault = parts[0];
+      const itemName = parts.slice(1).join('/');
+      try {
+        const jsonStr = runCmd(`op item get "${itemName}" --vault "${vault}" --format json`, 15_000);
+        const item = JSON.parse(jsonStr);
+        const fields = item.fields || [];
+        // Priority order for finding the credential value
+        const priorityLabels = ['credential', 'password', 'api_key', 'api key', 'secret', 'token', 'notesPlain'];
+        for (const label of priorityLabels) {
+          const field = fields.find((f: { label?: string; value?: string }) =>
+            f.label?.toLowerCase() === label.toLowerCase() && f.value && f.value.length > 0
+          );
+          if (field) return { value: field.value, method: '1password' };
+        }
+        // Fall back to any field with a value
+        const anyField = fields.find((f: { value?: string; label?: string }) =>
+          f.value && f.value.length > 0 && !['username', 'notesPlain'].includes(f.label || '')
+        );
+        if (anyField) return { value: anyField.value, method: '1password' };
+      } catch { /* item not found */ }
+      return { value: null, method: '1password' };
+    }
+
+    // Standard path — try field names via `op read`
     const fieldNames = ['credential', 'password', 'api_key', 'api key', 'secret', 'token', 'notesPlain'];
     for (const field of fieldNames) {
       try {
@@ -226,6 +294,16 @@ async function validateApiKey(provider: string, apiKey: string): Promise<{ ok: b
         return { ok: false, detail: `Slack API returned ${res.status}` };
       }
 
+      case 'notion': {
+        const res = await fetch('https://api.notion.com/v1/users/me', {
+          headers: { Authorization: `Bearer ${apiKey}`, 'Notion-Version': '2022-06-28' },
+          signal: AbortSignal.timeout(10_000),
+        });
+        if (res.ok) return { ok: true, detail: 'API key valid' };
+        if (res.status === 401) return { ok: false, detail: 'Invalid API key (401)' };
+        return { ok: false, detail: `API returned ${res.status}` };
+      }
+
       // For providers without a known validation endpoint, just check the key exists
       default:
         return { ok: true, detail: `Credential present (${apiKey.length} chars)` };
@@ -267,8 +345,11 @@ async function testIntegration(integration: Integration): Promise<TestResult> {
   if (integration.type === 'cli_auth') {
     if (credSource.startsWith('gog:')) {
       try {
-        const out = runCmd('gog auth check', 10_000);
-        return { status: 'pass', message: `Google auth: ${out}`, duration_ms: elapsed() };
+        const out = runCmd('gog auth list', 10_000);
+        if (out.includes('No tokens stored') || out.trim().length === 0) {
+          return { status: 'fail', message: 'Google auth: No tokens stored', duration_ms: elapsed() };
+        }
+        return { status: 'pass', message: `Google auth: ${out.split('\n')[0]}`, duration_ms: elapsed() };
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         return { status: 'fail', message: `Google auth failed: ${msg.slice(0, 200)}`, duration_ms: elapsed() };

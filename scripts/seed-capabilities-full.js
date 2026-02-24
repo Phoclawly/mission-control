@@ -29,7 +29,7 @@ function now() {
 
 // ─── Capability Definitions ─────────────────────────────────────────────────
 
-const SKILLS_BASE = '/home/node/.openclaw/workspace-main/skills';
+const SKILLS_BASE = '/home/node/.openclaw/skills';
 
 const capabilities = [
   // === SKILLS (repo skills/ directory) ===
@@ -41,7 +41,7 @@ const capabilities = [
     provider: 'custom',
     is_shared: 0,
     workspace_id: 'default',
-    skill_path: SKILLS_BASE + '/coding_router.md',
+    skill_path: SKILLS_BASE + '/coding-router/SKILL.md',
   },
   {
     id: 'skill-code-supervisor',
@@ -51,7 +51,7 @@ const capabilities = [
     provider: 'custom',
     is_shared: 0,
     workspace_id: 'default',
-    skill_path: SKILLS_BASE + '/code_supervisor.md',
+    skill_path: SKILLS_BASE + '/code-supervisor/SKILL.md',
   },
   {
     id: 'skill-cursor-supervisor',
@@ -61,7 +61,7 @@ const capabilities = [
     provider: 'custom',
     is_shared: 0,
     workspace_id: 'default',
-    skill_path: SKILLS_BASE + '/cursor_supervisor.md',
+    skill_path: SKILLS_BASE + '/cursor-supervisor/SKILL.md',
   },
   {
     id: 'skill-codex-supervisor',
@@ -71,7 +71,7 @@ const capabilities = [
     provider: 'custom',
     is_shared: 0,
     workspace_id: 'default',
-    skill_path: SKILLS_BASE + '/codex_supervisor.md',
+    skill_path: SKILLS_BASE + '/codex-supervisor/SKILL.md',
   },
   {
     id: 'skill-ralph-supervisor',
@@ -81,7 +81,7 @@ const capabilities = [
     provider: 'custom',
     is_shared: 0,
     workspace_id: 'default',
-    skill_path: SKILLS_BASE + '/ralph_supervisor.md',
+    skill_path: SKILLS_BASE + '/ralph-supervisor/SKILL.md',
   },
   {
     id: 'skill-oz-supervisor',
@@ -91,7 +91,7 @@ const capabilities = [
     provider: 'custom',
     is_shared: 0,
     workspace_id: 'default',
-    skill_path: SKILLS_BASE + '/oz_supervisor.md',
+    skill_path: SKILLS_BASE + '/oz-supervisor/SKILL.md',
   },
   {
     id: 'skill-email-router',
@@ -101,7 +101,7 @@ const capabilities = [
     provider: 'custom',
     is_shared: 0,
     workspace_id: 'default',
-    skill_path: SKILLS_BASE + '/email_router.md',
+    skill_path: SKILLS_BASE + '/email-router/SKILL.md',
   },
   {
     id: 'skill-agentmail',
@@ -111,7 +111,7 @@ const capabilities = [
     provider: 'custom',
     is_shared: 0,
     workspace_id: 'default',
-    skill_path: SKILLS_BASE + '/agentmail.md',
+    skill_path: SKILLS_BASE + '/agentmail/SKILL.md',
   },
   {
     id: 'skill-meetings-organizer-v2',
@@ -121,7 +121,7 @@ const capabilities = [
     provider: 'custom',
     is_shared: 0,
     workspace_id: 'default',
-    skill_path: SKILLS_BASE + '/meetings_organizer_v2.md',
+    skill_path: SKILLS_BASE + '/meetings-organizer-v2/SKILL.md',
   },
   {
     id: 'skill-meets-transcripts-organizer',
@@ -131,7 +131,7 @@ const capabilities = [
     provider: 'custom',
     is_shared: 0,
     workspace_id: 'default',
-    skill_path: SKILLS_BASE + '/meets_transcripts_organizer.md',
+    skill_path: SKILLS_BASE + '/meets-transcripts-organizer/SKILL.md',
   },
   {
     id: 'skill-notion-tasks',
@@ -141,7 +141,7 @@ const capabilities = [
     provider: 'custom',
     is_shared: 0,
     workspace_id: 'default',
-    skill_path: SKILLS_BASE + '/notion_tasks.md',
+    skill_path: SKILLS_BASE + '/notion-tasks/SKILL.md',
   },
   {
     id: 'skill-system-consultor',
@@ -151,7 +151,7 @@ const capabilities = [
     provider: 'custom',
     is_shared: 0,
     workspace_id: 'default',
-    skill_path: SKILLS_BASE + '/system_consultor.md',
+    skill_path: SKILLS_BASE + '/system-consultor/SKILL.md',
   },
   {
     id: 'skill-browser-use',
@@ -161,7 +161,7 @@ const capabilities = [
     provider: 'browser-use',
     is_shared: 1,
     workspace_id: null,
-    skill_path: SKILLS_BASE + '/browser_use.md',
+    skill_path: SKILLS_BASE + '/browser-use/SKILL.md',
   },
   {
     id: 'skill-agent-browser',
@@ -171,7 +171,7 @@ const capabilities = [
     provider: 'custom',
     is_shared: 1,
     workspace_id: null,
-    skill_path: SKILLS_BASE + '/agent_browser.md',
+    skill_path: SKILLS_BASE + '/agent-browser/SKILL.md',
   },
   {
     id: 'skill-browserstack-automation',
@@ -181,7 +181,7 @@ const capabilities = [
     provider: 'browserstack',
     is_shared: 0,
     workspace_id: 'default',
-    skill_path: SKILLS_BASE + '/browserstack_automation.md',
+    skill_path: SKILLS_BASE + '/browserstack-automation/SKILL.md',
   },
   {
     id: 'skill-frontend-design',
@@ -191,7 +191,7 @@ const capabilities = [
     provider: 'anthropic',
     is_shared: 0,
     workspace_id: 'default',
-    skill_path: SKILLS_BASE + '/frontend_design.md',
+    skill_path: SKILLS_BASE + '/frontend-design/SKILL.md',
   },
   {
     id: 'skill-last30days',
@@ -201,7 +201,7 @@ const capabilities = [
     provider: 'custom',
     is_shared: 0,
     workspace_id: 'default',
-    skill_path: SKILLS_BASE + '/last30days.md',
+    skill_path: SKILLS_BASE + '/last30days/SKILL.md',
   },
   {
     id: 'skill-skill-creator',
@@ -211,7 +211,7 @@ const capabilities = [
     provider: 'custom',
     is_shared: 1,
     workspace_id: null,
-    skill_path: SKILLS_BASE + '/skill_creator.md',
+    skill_path: SKILLS_BASE + '/skill-creator/SKILL.md',
   },
   {
     id: 'skill-krea-ai',
@@ -221,7 +221,7 @@ const capabilities = [
     provider: 'krea.ai',
     is_shared: 0,
     workspace_id: 'default',
-    skill_path: SKILLS_BASE + '/krea_ai.md',
+    skill_path: SKILLS_BASE + '/krea-ai/SKILL.md',
   },
   {
     id: 'skill-superdesign',
@@ -231,7 +231,7 @@ const capabilities = [
     provider: 'superdesign',
     is_shared: 0,
     workspace_id: 'default',
-    skill_path: SKILLS_BASE + '/superdesign.md',
+    skill_path: SKILLS_BASE + '/superdesign/SKILL.md',
   },
 
   // === VPS-INSTALLED SKILLS (from SKILLS-INSTALLED.md) ===
@@ -243,7 +243,7 @@ const capabilities = [
     provider: 'obra/superpowers',
     is_shared: 1,
     workspace_id: null,
-    skill_path: SKILLS_BASE + '/writing_plans.md',
+    skill_path: SKILLS_BASE + '/writing-plans/SKILL.md',
   },
   {
     id: 'skill-systematic-debugging',
@@ -253,7 +253,7 @@ const capabilities = [
     provider: 'obra/superpowers',
     is_shared: 1,
     workspace_id: null,
-    skill_path: SKILLS_BASE + '/systematic_debugging.md',
+    skill_path: SKILLS_BASE + '/systematic-debugging/SKILL.md',
   },
   {
     id: 'skill-test-driven-development',
@@ -263,7 +263,7 @@ const capabilities = [
     provider: 'obra/superpowers',
     is_shared: 1,
     workspace_id: null,
-    skill_path: SKILLS_BASE + '/test_driven_development.md',
+    skill_path: SKILLS_BASE + '/test-driven-development/SKILL.md',
   },
   {
     id: 'skill-supabase-postgres',
@@ -273,7 +273,7 @@ const capabilities = [
     provider: 'supabase/agent-skills',
     is_shared: 1,
     workspace_id: null,
-    skill_path: SKILLS_BASE + '/supabase_postgres_best_practices.md',
+    skill_path: SKILLS_BASE + '/supabase-postgres-best-practices/SKILL.md',
   },
   {
     id: 'skill-cloudflare',
@@ -283,7 +283,7 @@ const capabilities = [
     provider: 'cloudflare/skills',
     is_shared: 1,
     workspace_id: null,
-    skill_path: SKILLS_BASE + '/cloudflare.md',
+    skill_path: SKILLS_BASE + '/cloudflare/SKILL.md',
   },
   {
     id: 'skill-ai-agents-architect',
@@ -293,7 +293,7 @@ const capabilities = [
     provider: 'sickn33/antigravity-awesome-skills',
     is_shared: 1,
     workspace_id: null,
-    skill_path: SKILLS_BASE + '/ai_agents_architect.md',
+    skill_path: SKILLS_BASE + '/ai-agents-architect/SKILL.md',
   },
   {
     id: 'skill-security-auditor',
@@ -303,7 +303,7 @@ const capabilities = [
     provider: 'erichowens/some_claude_skills',
     is_shared: 1,
     workspace_id: null,
-    skill_path: SKILLS_BASE + '/security_auditor.md',
+    skill_path: SKILLS_BASE + '/security-auditor/SKILL.md',
   },
   {
     id: 'skill-github-actions-expert',
@@ -313,7 +313,7 @@ const capabilities = [
     provider: 'cin12211/orca-q',
     is_shared: 1,
     workspace_id: null,
-    skill_path: SKILLS_BASE + '/github_actions_expert.md',
+    skill_path: SKILLS_BASE + '/github-actions-expert/SKILL.md',
   },
   {
     id: 'skill-copywriting',
@@ -323,7 +323,7 @@ const capabilities = [
     provider: 'coreyhaines31/marketingskills',
     is_shared: 0,
     workspace_id: 'default',
-    skill_path: SKILLS_BASE + '/copywriting.md',
+    skill_path: SKILLS_BASE + '/copywriting/SKILL.md',
   },
   {
     id: 'skill-content-strategy',
@@ -333,7 +333,7 @@ const capabilities = [
     provider: 'coreyhaines31/marketingskills',
     is_shared: 0,
     workspace_id: 'default',
-    skill_path: SKILLS_BASE + '/content_strategy.md',
+    skill_path: SKILLS_BASE + '/content-strategy/SKILL.md',
   },
   {
     id: 'skill-product-marketing-context',
@@ -343,7 +343,7 @@ const capabilities = [
     provider: 'coreyhaines31/marketingskills',
     is_shared: 0,
     workspace_id: 'default',
-    skill_path: SKILLS_BASE + '/product_marketing_context.md',
+    skill_path: SKILLS_BASE + '/product-marketing-context/SKILL.md',
   },
   {
     id: 'skill-seo-audit',
@@ -353,7 +353,7 @@ const capabilities = [
     provider: 'coreyhaines31/marketingskills',
     is_shared: 0,
     workspace_id: 'default',
-    skill_path: SKILLS_BASE + '/seo_audit.md',
+    skill_path: SKILLS_BASE + '/seo-audit/SKILL.md',
   },
   {
     id: 'skill-programmatic-seo',
@@ -363,7 +363,7 @@ const capabilities = [
     provider: 'coreyhaines31/marketingskills',
     is_shared: 0,
     workspace_id: 'default',
-    skill_path: SKILLS_BASE + '/programmatic_seo.md',
+    skill_path: SKILLS_BASE + '/programmatic-seo/SKILL.md',
   },
   {
     id: 'skill-marketing-psychology',
@@ -373,7 +373,7 @@ const capabilities = [
     provider: 'skills.sh',
     is_shared: 0,
     workspace_id: 'default',
-    skill_path: SKILLS_BASE + '/marketing_psychology.md',
+    skill_path: SKILLS_BASE + '/marketing-psychology/SKILL.md',
   },
   {
     id: 'skill-remotion-best-practices',
@@ -383,7 +383,7 @@ const capabilities = [
     provider: 'remotion (official)',
     is_shared: 0,
     workspace_id: 'default',
-    skill_path: SKILLS_BASE + '/remotion_best_practices.md',
+    skill_path: SKILLS_BASE + '/remotion-best-practices/SKILL.md',
   },
   {
     id: 'skill-radio-producer',
@@ -393,7 +393,7 @@ const capabilities = [
     provider: 'custom',
     is_shared: 0,
     workspace_id: 'default',
-    skill_path: SKILLS_BASE + '/radio_producer.md',
+    skill_path: SKILLS_BASE + '/radio-producer/SKILL.md',
   },
   {
     id: 'skill-cua-desktop',
@@ -403,7 +403,7 @@ const capabilities = [
     provider: 'cua.ai',
     is_shared: 0,
     workspace_id: 'default',
-    skill_path: SKILLS_BASE + '/cua_desktop.md',
+    skill_path: SKILLS_BASE + '/cua-desktop/SKILL.md',
   },
 
   // === CLI TOOLS ===

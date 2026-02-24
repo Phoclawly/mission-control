@@ -2,6 +2,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import { queryAll, queryOne } from '@/lib/db';
 import type { CapabilitiesOverview } from '@/lib/types';
 
+function formatAlertMessage(raw: string): string {
+  if (/environment variable not set/i.test(raw)) return 'Environment variable not set';
+  if (/could not read from 1password/i.test(raw)) return '1Password credential not accessible';
+  // Strip credential_source paths like "(openclaw.json:KEY)" or "(1password:item/field)"
+  return raw.replace(/\s*\([^)]*:[^)]+\)\s*$/, '').trim();
+}
+
 // GET /api/capabilities/overview - Aggregated dashboard data
 export async function GET(request: NextRequest) {
   try {
@@ -75,10 +82,12 @@ export async function GET(request: NextRequest) {
       `SELECT name, status, health_message FROM capabilities WHERE status IN ('broken', 'degraded')`
     );
     for (const cap of brokenCapabilities) {
+      const raw = cap.health_message || `Capability "${cap.name}" is ${cap.status}`;
       alerts.push({
         type: cap.status === 'broken' ? 'error' : 'warning',
         target: cap.name,
-        message: cap.health_message || `Capability "${cap.name}" is ${cap.status}`,
+        message: formatAlertMessage(raw),
+        detail: raw,
       });
     }
 
@@ -86,10 +95,12 @@ export async function GET(request: NextRequest) {
       `SELECT name, status, validation_message FROM integrations WHERE status IN ('broken', 'expired')`
     );
     for (const int of brokenIntegrations) {
+      const raw = int.validation_message || `Integration "${int.name}" is ${int.status}`;
       alerts.push({
         type: int.status === 'broken' ? 'error' : 'warning',
         target: int.name,
-        message: int.validation_message || `Integration "${int.name}" is ${int.status}`,
+        message: formatAlertMessage(raw),
+        detail: raw,
       });
     }
 

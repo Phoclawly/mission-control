@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { AlertTriangle, X } from 'lucide-react';
 
 interface AlertsBannerProps {
-  alerts: { type: string; target: string; message: string }[];
+  alerts: { type: string; target: string; message: string; detail?: string }[];
 }
 
 export function AlertsBanner({ alerts }: AlertsBannerProps) {
@@ -32,7 +32,7 @@ export function AlertsBanner({ alerts }: AlertsBannerProps) {
             {alerts.map((alert, idx) => (
               <li key={idx} className="text-sm text-mc-text-secondary flex items-start gap-2">
                 <span className="text-mc-accent-yellow mt-1">&#8226;</span>
-                <span>
+                <span title={alert.detail || undefined}>
                   <span className="text-mc-text font-medium">{alert.target}</span>
                   {' '}&mdash; {alert.message}
                 </span>

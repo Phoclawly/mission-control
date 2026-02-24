@@ -454,6 +454,7 @@ export interface CapabilitiesOverview {
     type: string;
     target: string;
     message: string;
+    detail?: string;
   }[];
   cronSummary: {
     active: number;

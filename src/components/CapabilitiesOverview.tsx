@@ -8,8 +8,8 @@ interface CapabilitiesOverviewProps {
 }
 
 export function CapabilitiesOverview({ overview }: CapabilitiesOverviewProps) {
-  const healthyCount = overview.capabilities.byStatus?.healthy ?? 0;
-  const brokenCount = (overview.capabilities.byStatus?.broken ?? 0) + (overview.capabilities.byStatus?.degraded ?? 0);
+  const healthyCount = (overview.capabilities.byStatus?.healthy ?? 0) + (overview.integrations.byStatus?.connected ?? 0);
+  const brokenCount = (overview.capabilities.byStatus?.broken ?? 0) + (overview.capabilities.byStatus?.degraded ?? 0) + (overview.integrations.byStatus?.broken ?? 0);
   const integrationsCount = overview.integrations.total;
 
   // Tools: cli_tool + browser_automation

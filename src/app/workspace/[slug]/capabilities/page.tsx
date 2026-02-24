@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { ChevronLeft, Shield, Plug, Clock, Activity, PlayCircle, Loader2, CheckCircle2, XCircle } from 'lucide-react';
+import { ChevronLeft, Shield, Plug, Clock, Activity, PlayCircle, Loader2, CheckCircle2, XCircle, X } from 'lucide-react';
 import { Header } from '@/components/Header';
 import { CapabilitiesOverview } from '@/components/CapabilitiesOverview';
 import { AlertsBanner } from '@/components/AlertsBanner';
@@ -157,45 +157,57 @@ export default function CapabilitiesPage() {
     let passed = 0;
     let failed = 0;
     const failedIds = new Set<string>();
+    const statusMap = new Map<string, string>();
+    const queue = [...integrations];
+    const CONCURRENCY = 3;
 
-    const promises = integrations.map(async (integration) => {
-      try {
-        const res = await fetch(`/api/integrations/${integration.id}/test`, { method: 'POST' });
-        if (res.ok) {
-          const updated = await res.json();
-          setIntegrations((prev) =>
-            prev.map((i) => (i.id === integration.id ? updated : i))
-          );
-          if (updated.status === 'connected') {
-            passed++;
+    const testOne = async () => {
+      let next: Integration | undefined;
+      while ((next = queue.shift())) {
+        const integration = next;
+        try {
+          const res = await fetch(`/api/integrations/${integration.id}/test`, { method: 'POST' });
+          if (res.ok) {
+            const updated = await res.json();
+            setIntegrations((prev) =>
+              prev.map((i) => (i.id === integration.id ? updated : i))
+            );
+            statusMap.set(integration.id, updated.status);
+            if (updated.status === 'connected') {
+              passed++;
+            } else {
+              failed++;
+              failedIds.add(integration.id);
+            }
           } else {
             failed++;
             failedIds.add(integration.id);
+            statusMap.set(integration.id, 'broken');
           }
-        } else {
+        } catch {
           failed++;
           failedIds.add(integration.id);
+          statusMap.set(integration.id, 'broken');
         }
-      } catch {
-        failed++;
-        failedIds.add(integration.id);
+        setTestAllProgress((prev) => ({ ...prev, completed: prev.completed + 1 }));
       }
-      setTestAllProgress((prev) => ({ ...prev, completed: prev.completed + 1 }));
-    });
+    };
 
-    await Promise.all(promises);
+    await Promise.all(Array.from({ length: CONCURRENCY }, () => testOne()));
 
     setTestAllRunning(false);
     setTestAllResults({ passed, failed, failedIds });
     setFailedHighlightIds(failedIds);
 
-    // Clear the red highlight after 6 seconds
-    if (failedIds.size > 0) {
-      setTimeout(() => setFailedHighlightIds(new Set()), 6000);
-    }
-
-    // Clear the summary message after 10 seconds
-    setTimeout(() => setTestAllResults(null), 10000);
+    // Update overview stats cards with fresh integration status counts
+    const intByStatus: Record<string, number> = {};
+    statusMap.forEach((status) => {
+      intByStatus[status] = (intByStatus[status] ?? 0) + 1;
+    });
+    setOverview((prev) => prev ? {
+      ...prev,
+      integrations: { ...prev.integrations, byStatus: intByStatus },
+    } : prev);
   }, [testAllRunning, integrations]);
 
   if (notFound) {
@@ -331,6 +343,13 @@ export default function CapabilitiesPage() {
                         {testAllResults.passed}/{testAllResults.passed + testAllResults.failed} connected
                         {testAllResults.failed > 0 && `, ${testAllResults.failed} failed`}
                       </span>
+                      <button
+                        onClick={() => { setTestAllResults(null); setFailedHighlightIds(new Set()); }}
+                        className="ml-1 p-0.5 rounded hover:bg-black/10 transition-colors"
+                        title="Dismiss"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
                     </div>
                   )}
                 </div>

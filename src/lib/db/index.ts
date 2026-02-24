@@ -11,20 +11,23 @@ let db: Database.Database | null = null;
 export function getDb(): Database.Database {
   if (!db) {
     const isNewDb = !fs.existsSync(DB_PATH);
-    
+
     db = new Database(DB_PATH);
     db.pragma('journal_mode = WAL');
     db.pragma('foreign_keys = ON');
 
-    // Initialize base schema (creates tables if they don't exist)
-    db.exec(schema);
-
-    // Run migrations for schema updates
-    // This handles both new and existing databases
-    runMigrations(db);
-    
     if (isNewDb) {
+      // New database: schema creates all tables + indexes in one shot
+      db.exec(schema);
+      runMigrations(db);
       console.log('[DB] New database created at:', DB_PATH);
+    } else {
+      // Existing database: run migrations FIRST to add any missing columns,
+      // then exec schema to create any missing tables/indexes.
+      // This prevents CREATE INDEX from failing on columns that only exist
+      // after a migration runs (e.g. evaluation_status, completion_summary).
+      runMigrations(db);
+      db.exec(schema);
     }
   }
   return db;

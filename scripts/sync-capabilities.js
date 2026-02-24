@@ -4,7 +4,7 @@
  *
  * Reads:
  *   - $WORKSPACE_BASE_PATH/../skills/ (shared skills)
- *   - $WORKSPACE_BASE_PATH/../workspace-*/skills/ (agent-specific skills)
+ *   - $WORKSPACE_BASE_PATH/../workspace-{id}/skills/ (agent-specific skills)
  *   - $WORKSPACE_BASE_PATH/../openclaw.json (config: skills, MCP plugins, cron)
  *   - System crontab (if available)
  *

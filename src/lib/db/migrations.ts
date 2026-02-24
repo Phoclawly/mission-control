@@ -468,6 +468,39 @@ const migrations: Migration[] = [
       db.exec(`CREATE INDEX IF NOT EXISTS idx_tasks_task_type ON tasks(task_type)`);
     }
   }
+  ,{
+    id: '016',
+    name: 'add_learnings_index_and_eval_status',
+    up: (db) => {
+      console.log('[Migration 016] Adding agent_learnings_index table and evaluation_status column...');
+
+      // Create learnings index table
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS agent_learnings_index (
+          id TEXT PRIMARY KEY,
+          agent_id TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+          learnings_count INTEGER DEFAULT 0,
+          anti_patterns_count INTEGER DEFAULT 0,
+          pending_count INTEGER DEFAULT 0,
+          learnings_size_bytes INTEGER DEFAULT 0,
+          last_learning_date TEXT,
+          updated_at TEXT DEFAULT (datetime('now')),
+          UNIQUE(agent_id)
+        );
+      `);
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_agent_learnings_agent ON agent_learnings_index(agent_id)`);
+
+      // Add evaluation_status to tasks
+      const tasksInfo = db.prepare("PRAGMA table_info(tasks)").all() as { name: string }[];
+      if (!tasksInfo.some(col => col.name === 'evaluation_status')) {
+        db.exec(`ALTER TABLE tasks ADD COLUMN evaluation_status TEXT DEFAULT 'none'`);
+        db.exec(`CREATE INDEX IF NOT EXISTS idx_tasks_evaluation_status ON tasks(evaluation_status)`);
+        console.log('[Migration 016] Added evaluation_status to tasks');
+      }
+
+      console.log('[Migration 016] agent_learnings_index table created');
+    }
+  }
 ];
 
 /**

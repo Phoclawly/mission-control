@@ -19,6 +19,7 @@ const SCRIPTS = [
   { name: 'sync-from-json', path: path.join(__dirname, 'sync-from-json.js') },
   { name: 'sync-capabilities', path: path.join(__dirname, 'sync-capabilities.js') },
   { name: 'sync-memory-index', path: path.join(__dirname, 'sync-memory-index.js') },
+  { name: 'sync-learnings-index', path: path.join(__dirname, 'sync-learnings-index.js') },
 ];
 const INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 

@@ -64,6 +64,7 @@ CREATE TABLE IF NOT EXISTS tasks (
   planning_dispatch_error TEXT,
   task_type TEXT DEFAULT 'openclaw-native',
   task_type_config TEXT,
+  evaluation_status TEXT DEFAULT 'none' CHECK (evaluation_status IN ('none', 'pending', 'running', 'completed', 'skipped')),
   created_at TEXT DEFAULT (datetime('now')),
   updated_at TEXT DEFAULT (datetime('now'))
 );
@@ -262,6 +263,19 @@ CREATE TABLE IF NOT EXISTS agent_memory_index (
   UNIQUE(agent_id, date)
 );
 
+-- Agent learnings index (synced from workspace learnings files)
+CREATE TABLE IF NOT EXISTS agent_learnings_index (
+  id TEXT PRIMARY KEY,
+  agent_id TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+  learnings_count INTEGER DEFAULT 0,
+  anti_patterns_count INTEGER DEFAULT 0,
+  pending_count INTEGER DEFAULT 0,
+  learnings_size_bytes INTEGER DEFAULT 0,
+  last_learning_date TEXT,
+  updated_at TEXT DEFAULT (datetime('now')),
+  UNIQUE(agent_id)
+);
+
 -- Indexes for performance
 CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
 CREATE INDEX IF NOT EXISTS idx_tasks_assigned ON tasks(assigned_agent_id);
@@ -287,4 +301,6 @@ CREATE INDEX IF NOT EXISTS idx_health_checks_checked ON health_checks(checked_at
 CREATE INDEX IF NOT EXISTS idx_cron_jobs_agent ON cron_jobs(agent_id);
 CREATE INDEX IF NOT EXISTS idx_cron_jobs_status ON cron_jobs(status);
 CREATE INDEX IF NOT EXISTS idx_agent_memory_agent_date ON agent_memory_index(agent_id, date DESC);
+CREATE INDEX IF NOT EXISTS idx_agent_learnings_agent ON agent_learnings_index(agent_id);
+CREATE INDEX IF NOT EXISTS idx_tasks_evaluation_status ON tasks(evaluation_status);
 `;

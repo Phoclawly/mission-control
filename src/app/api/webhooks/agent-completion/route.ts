@@ -3,6 +3,50 @@ import { v4 as uuidv4 } from 'uuid';
 import { createHmac } from 'crypto';
 import { queryOne, queryAll, run } from '@/lib/db';
 import type { Task, Agent, OpenClawSession } from '@/lib/types';
+import { execFile } from 'child_process';
+
+/**
+ * Trigger ARGUS post-task evaluation (fire-and-forget)
+ * Runs the post-task-evaluate.sh script asynchronously
+ */
+function triggerPostTaskEvaluation(agentId: string, taskId: string, timestamp: string) {
+  if (!agentId) return;
+
+  const evalScript = '/home/node/.openclaw/bin/post-task-evaluate.sh';
+
+  try {
+    // Update task evaluation status to pending
+    run(
+      'UPDATE tasks SET evaluation_status = ? WHERE id = ?',
+      ['pending', taskId]
+    );
+
+    // Fire-and-forget: spawn the evaluation script
+    const child = execFile(evalScript, [agentId, taskId], {
+      timeout: 60000,
+      env: { ...process.env, OPENCLAW_BASE: '/home/node/.openclaw' }
+    }, (error, stdout, stderr) => {
+      if (error) {
+        console.error(`[WEBHOOK] Post-task eval failed for ${agentId}/${taskId}:`, error.message);
+        run(
+          'UPDATE tasks SET evaluation_status = ? WHERE id = ?',
+          ['none', taskId]
+        );
+      } else {
+        console.log(`[WEBHOOK] Post-task eval completed for ${agentId}/${taskId}`);
+        run(
+          'UPDATE tasks SET evaluation_status = ? WHERE id = ?',
+          ['completed', taskId]
+        );
+      }
+    });
+
+    // Don't let the child process prevent Node from exiting
+    child.unref();
+  } catch (e: any) {
+    console.error(`[WEBHOOK] Failed to trigger post-task eval:`, e.message);
+  }
+}
 
 /**
  * Verify HMAC-SHA256 signature of webhook request
@@ -109,6 +153,9 @@ export async function POST(request: NextRequest) {
         );
       }
 
+      // Trigger post-task evaluation (fire-and-forget)
+      triggerPostTaskEvaluation(task.assigned_agent_id || '', task.id, now);
+
       return NextResponse.json({
         success: true,
         task_id: task.id,
@@ -190,6 +237,9 @@ export async function POST(request: NextRequest) {
         'UPDATE agents SET status = ?, updated_at = ? WHERE id = ?',
         ['standby', now, session.agent_id]
       );
+
+      // Trigger post-task evaluation (fire-and-forget)
+      triggerPostTaskEvaluation(session.agent_id || '', task.id, now);
 
       return NextResponse.json({
         success: true,

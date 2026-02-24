@@ -26,6 +26,7 @@
 - Route handlers must be dynamically imported (`await import()`) AFTER `setupTestDb()` to ensure they see the test DB
 - Use seed helpers (`seedWorkspace`, `seedAgent`, `seedTask`, etc.) from `src/test/helpers/db.ts`
 - 100 tests total, 93 passing. 7 known failures in middleware auth-enabled section — do not try to "fix" these without explicit ask
+- **Visual QA:** After UI changes, use `/dogfood http://localhost:14040` for comprehensive browser-based testing — navigates every page, screenshots interactions, and produces structured bug reports with full repro evidence. Prefer this over ad-hoc browser clicks
 
 ## Anti-Patterns (NEVER DO)
 

@@ -259,6 +259,197 @@ const migrations: Migration[] = [
         console.log('[Migration 010] Added current_activity to agents');
       }
     }
+  },
+  {
+    id: '011',
+    name: 'add_capabilities_integrations_crons_memory',
+    up: (db) => {
+      console.log('[Migration 011] Adding capabilities, integrations, crons, health_checks, and memory tables...');
+
+      // Capabilities registry
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS capabilities (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          category TEXT NOT NULL CHECK (category IN ('browser_automation', 'mcp_server', 'cli_tool', 'api_integration', 'skill', 'workflow', 'credential_provider')),
+          description TEXT,
+          provider TEXT,
+          version TEXT,
+          install_path TEXT,
+          config_ref TEXT,
+          is_shared INTEGER DEFAULT 1,
+          status TEXT DEFAULT 'unknown' CHECK (status IN ('healthy', 'degraded', 'broken', 'unknown', 'disabled')),
+          last_health_check TEXT,
+          health_message TEXT,
+          metadata TEXT,
+          created_at TEXT DEFAULT (datetime('now')),
+          updated_at TEXT DEFAULT (datetime('now'))
+        );
+      `);
+
+      // Agent-capability junction
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS agent_capabilities (
+          agent_id TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+          capability_id TEXT NOT NULL REFERENCES capabilities(id) ON DELETE CASCADE,
+          enabled INTEGER DEFAULT 1,
+          config_override TEXT,
+          PRIMARY KEY (agent_id, capability_id)
+        );
+      `);
+
+      // Integrations
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS integrations (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          type TEXT NOT NULL CHECK (type IN ('mcp_plugin', 'oauth_token', 'api_key', 'cli_auth', 'browser_profile', 'cron_job', 'webhook')),
+          provider TEXT,
+          status TEXT DEFAULT 'unknown' CHECK (status IN ('connected', 'expired', 'broken', 'unconfigured', 'unknown')),
+          credential_source TEXT,
+          last_validated TEXT,
+          validation_message TEXT,
+          config TEXT,
+          metadata TEXT,
+          created_at TEXT DEFAULT (datetime('now')),
+          updated_at TEXT DEFAULT (datetime('now'))
+        );
+      `);
+
+      // Health checks log
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS health_checks (
+          id TEXT PRIMARY KEY,
+          target_type TEXT NOT NULL CHECK (target_type IN ('capability', 'integration')),
+          target_id TEXT NOT NULL,
+          status TEXT NOT NULL CHECK (status IN ('pass', 'fail', 'warn', 'skip')),
+          message TEXT,
+          duration_ms INTEGER,
+          checked_at TEXT DEFAULT (datetime('now'))
+        );
+      `);
+
+      // Cron jobs per agent
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS cron_jobs (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          schedule TEXT NOT NULL,
+          command TEXT NOT NULL,
+          agent_id TEXT REFERENCES agents(id) ON DELETE SET NULL,
+          type TEXT DEFAULT 'shell' CHECK (type IN ('lobster', 'shell', 'llm')),
+          status TEXT DEFAULT 'active' CHECK (status IN ('active', 'disabled', 'stale')),
+          last_run TEXT,
+          last_result TEXT,
+          last_duration_ms INTEGER,
+          error_count INTEGER DEFAULT 0,
+          description TEXT,
+          created_at TEXT DEFAULT (datetime('now')),
+          updated_at TEXT DEFAULT (datetime('now'))
+        );
+      `);
+
+      // Agent memory index
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS agent_memory_index (
+          id TEXT PRIMARY KEY,
+          agent_id TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+          date TEXT NOT NULL,
+          file_path TEXT NOT NULL,
+          file_size_bytes INTEGER DEFAULT 0,
+          summary TEXT,
+          entry_count INTEGER DEFAULT 0,
+          created_at TEXT DEFAULT (datetime('now')),
+          UNIQUE(agent_id, date)
+        );
+      `);
+
+      // Indexes
+      db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_capabilities_category ON capabilities(category);
+        CREATE INDEX IF NOT EXISTS idx_capabilities_status ON capabilities(status);
+        CREATE INDEX IF NOT EXISTS idx_agent_capabilities_agent ON agent_capabilities(agent_id);
+        CREATE INDEX IF NOT EXISTS idx_agent_capabilities_capability ON agent_capabilities(capability_id);
+        CREATE INDEX IF NOT EXISTS idx_integrations_status ON integrations(status);
+        CREATE INDEX IF NOT EXISTS idx_health_checks_target ON health_checks(target_type, target_id);
+        CREATE INDEX IF NOT EXISTS idx_health_checks_checked ON health_checks(checked_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_cron_jobs_agent ON cron_jobs(agent_id);
+        CREATE INDEX IF NOT EXISTS idx_cron_jobs_status ON cron_jobs(status);
+        CREATE INDEX IF NOT EXISTS idx_agent_memory_agent_date ON agent_memory_index(agent_id, date DESC);
+      `);
+
+      console.log('[Migration 011] All new tables created');
+    }
+  },
+  {
+    id: '012',
+    name: 'fix_integrations_type_constraint',
+    up(db: Database.Database) {
+      console.log('[Migration 012] Adding credential_provider to integrations type constraint...');
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS integrations_new (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          type TEXT NOT NULL CHECK (type IN ('mcp_plugin', 'oauth_token', 'api_key', 'cli_auth', 'browser_profile', 'cron_job', 'webhook', 'credential_provider')),
+          provider TEXT,
+          status TEXT DEFAULT 'unknown' CHECK (status IN ('connected', 'expired', 'broken', 'unconfigured', 'unknown')),
+          credential_source TEXT,
+          last_validated TEXT,
+          validation_message TEXT,
+          config TEXT,
+          metadata TEXT,
+          created_at TEXT DEFAULT (datetime('now')),
+          updated_at TEXT DEFAULT (datetime('now'))
+        );
+        INSERT OR IGNORE INTO integrations_new SELECT * FROM integrations;
+        DROP TABLE integrations;
+        ALTER TABLE integrations_new RENAME TO integrations;
+      `);
+      console.log('[Migration 012] integrations table updated with credential_provider type');
+    }
+  },
+  {
+    id: '013',
+    name: 'workspace_scoping',
+    up: (db) => {
+      console.log('[Migration 013] Adding workspace_id to capabilities and integrations...');
+
+      const capsInfo = db.prepare("PRAGMA table_info(capabilities)").all() as { name: string }[];
+      if (!capsInfo.some(col => col.name === 'workspace_id')) {
+        db.exec(`ALTER TABLE capabilities ADD COLUMN workspace_id TEXT REFERENCES workspaces(id)`);
+        db.exec(`UPDATE capabilities SET workspace_id = 'default' WHERE is_shared = 0`);
+        db.exec(`CREATE INDEX IF NOT EXISTS idx_capabilities_workspace ON capabilities(workspace_id)`);
+        console.log('[Migration 013] Added workspace_id to capabilities');
+      }
+
+      const intsInfo = db.prepare("PRAGMA table_info(integrations)").all() as { name: string }[];
+      if (!intsInfo.some(col => col.name === 'workspace_id')) {
+        db.exec(`ALTER TABLE integrations ADD COLUMN workspace_id TEXT REFERENCES workspaces(id)`);
+        db.exec(`CREATE INDEX IF NOT EXISTS idx_integrations_workspace ON integrations(workspace_id)`);
+        console.log('[Migration 013] Added workspace_id to integrations');
+      }
+    }
+  },
+  {
+    id: '014',
+    name: 'add_skill_path',
+    up: (db) => {
+      console.log('[Migration 014] Adding skill_path to capabilities...');
+      const capsInfo = db.prepare("PRAGMA table_info(capabilities)").all() as { name: string }[];
+      if (!capsInfo.some(col => col.name === 'skill_path')) {
+        db.exec(`ALTER TABLE capabilities ADD COLUMN skill_path TEXT`);
+        console.log('[Migration 014] Added skill_path to capabilities');
+      }
+    }
+  },
+  {
+    id: '015',
+    name: 'delete_duplicate_1password_capability',
+    up: (db) => {
+      console.log('[Migration 015] Deleting duplicate credential-1password capability...');
+      db.exec(`DELETE FROM capabilities WHERE id = 'credential-1password'`);
+      console.log('[Migration 015] Deleted credential-1password capability');
+    }
   }
   ,{
     id: '011',

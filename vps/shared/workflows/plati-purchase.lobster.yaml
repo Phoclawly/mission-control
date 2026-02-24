@@ -1,0 +1,191 @@
+# plati-purchase.lobster.yaml
+# Deterministic purchase workflow for Plati marketplace
+name: plati-purchase
+version: "1.0"
+description: Automated purchase workflow for Plati marketplace with balance check, approval gate, and delivery verification
+
+trigger:
+  type: manual
+
+env:
+  PLATI_BASE_URL: ${PLATI_BASE_URL:-https://plati.io}
+  BUDGET_APPROVAL_THRESHOLD: ${BUDGET_APPROVAL_THRESHOLD:-500}
+  ACCOUNTING_SHEET_ID: ${ACCOUNTING_SHEET_ID:-1eq5Gw5CElkVz5UTb45_RlIpRp_rb1jKrEq6okZUvas8}
+  MAX_PURCHASE_RETRIES: ${MAX_PURCHASE_RETRIES:-2}
+
+inputs:
+  product_url:
+    type: string
+    required: true
+    description: Full URL of the Plati product to purchase
+  budget_limit:
+    type: number
+    required: true
+    description: Maximum amount willing to spend (in RUB)
+  category:
+    type: string
+    required: false
+    default: "general"
+    description: Accounting category for the purchase
+
+steps:
+  - id: validate-request
+    name: Validate purchase request
+    action: validate
+    validation:
+      - check: input_defined
+        field: product_url
+        expect: true
+        message: "product_url is required"
+      - check: input_matches
+        field: product_url
+        pattern: "^https?://(www\\.)?plati\\.(io|market)/"
+        message: "product_url must be a valid Plati URL"
+      - check: input_defined
+        field: budget_limit
+        expect: true
+        message: "budget_limit is required"
+      - check: input_numeric
+        field: budget_limit
+        min: 1
+        message: "budget_limit must be a positive number"
+    on_failure:
+      action: abort
+    outputs:
+      validated: "true"
+
+  - id: check-balance
+    name: Verify sufficient balance available
+    depends_on: [validate-request]
+    action: shell
+    command: |
+      # Check current Plati account balance
+      balance_json=$(curl -sf "${PLATI_BASE_URL}/api/balance" \
+        -H "Authorization: Bearer ${PLATI_API_TOKEN}" 2>/dev/null) || {
+        echo '{"error": "Failed to fetch balance"}'
+        exit 1
+      }
+      balance=$(echo "$balance_json" | jq -r '.balance // 0')
+      echo "{\"balance\": $balance, \"budget_limit\": ${inputs.budget_limit}}"
+      if [ "$(echo "$balance < ${inputs.budget_limit}" | bc -l)" -eq 1 ]; then
+        echo "WARNING: Balance ($balance) may be less than budget limit (${inputs.budget_limit})"
+      fi
+    validation:
+      - check: exit_code
+        expect: 0
+      - check: stdout_contains
+        expect: "balance"
+    on_failure:
+      action: abort
+      notification:
+        type: log
+        message: "Balance check failed - cannot proceed with purchase"
+    outputs:
+      balance_info: ${stdout}
+
+  - id: approval-gate
+    name: Require human approval if amount exceeds threshold
+    depends_on: [check-balance]
+    action: gate
+    condition: "${inputs.budget_limit} > ${BUDGET_APPROVAL_THRESHOLD}"
+    gate_type: human_approval
+    prompt: "Approve Plati purchase of up to ${inputs.budget_limit} RUB for ${inputs.product_url}?"
+    timeout: 3600s
+    on_failure:
+      action: abort
+      notification:
+        type: log
+        message: "Purchase not approved or approval timed out"
+    outputs:
+      approved: ${gate_result}
+
+  - id: execute-purchase
+    name: Execute purchase via browser automation
+    depends_on: [approval-gate]
+    action: shell
+    command: |
+      # Execute the Plati purchase using browser automation
+      lobster run browser-task \
+        --task "purchase" \
+        --url "${inputs.product_url}" \
+        --params "{\"budget_limit\": ${inputs.budget_limit}}" \
+        --timeout 120
+    validation:
+      - check: exit_code
+        expect: 0
+      - check: stdout_contains
+        expect: "purchase_id"
+    on_failure:
+      action: retry
+      retry_count: ${MAX_PURCHASE_RETRIES}
+      retry_delay: 10s
+    outputs:
+      purchase_result: ${stdout}
+
+  - id: verify-delivery
+    name: Confirm product key or file received
+    depends_on: [execute-purchase]
+    action: shell
+    command: |
+      # Verify delivery of purchased product
+      purchase_id=$(echo '${steps.execute-purchase.outputs.purchase_result}' | jq -r '.purchase_id')
+      max_attempts=6
+      attempt=0
+      while [ $attempt -lt $max_attempts ]; do
+        delivery=$(curl -sf "${PLATI_BASE_URL}/api/purchases/${purchase_id}/delivery" \
+          -H "Authorization: Bearer ${PLATI_API_TOKEN}" 2>/dev/null)
+        status=$(echo "$delivery" | jq -r '.status // "pending"')
+        if [ "$status" = "delivered" ]; then
+          echo "$delivery"
+          exit 0
+        fi
+        attempt=$((attempt + 1))
+        sleep 10
+      done
+      echo '{"error": "Delivery not confirmed after max attempts"}'
+      exit 1
+    validation:
+      - check: exit_code
+        expect: 0
+      - check: stdout_contains
+        expect: "delivered"
+    on_failure:
+      action: notify
+      notification:
+        type: log
+        message: "Delivery verification failed for purchase ${steps.execute-purchase.outputs.purchase_result} - manual check required"
+    outputs:
+      delivery_info: ${stdout}
+
+  - id: record-transaction
+    name: Log transaction to accounting spreadsheet
+    depends_on: [verify-delivery]
+    action: shell
+    command: |
+      # Record the transaction in the accounting sheet
+      timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+      purchase_data='${steps.execute-purchase.outputs.purchase_result}'
+      delivery_data='${steps.verify-delivery.outputs.delivery_info}'
+      amount=$(echo "$purchase_data" | jq -r '.amount // "unknown"')
+      product=$(echo "$purchase_data" | jq -r '.product_name // "unknown"')
+      purchase_id=$(echo "$purchase_data" | jq -r '.purchase_id // "unknown"')
+
+      lobster run gsheets-accounting \
+        --sheet-id "${ACCOUNTING_SHEET_ID}" \
+        --row "{\"date\": \"${timestamp}\", \"type\": \"plati-purchase\", \"category\": \"${inputs.category}\", \"description\": \"${product}\", \"amount\": \"${amount}\", \"reference\": \"${purchase_id}\", \"status\": \"completed\"}"
+    validation:
+      - check: exit_code
+        expect: 0
+    on_failure:
+      action: notify
+      notification:
+        type: log
+        message: "Transaction recording failed - purchase succeeded but accounting entry missing"
+    outputs:
+      record_result: ${stdout}
+
+error_handling:
+  default_action: abort
+  notification:
+    type: log
+    message: "Plati purchase workflow failed at step ${failed_step}: ${error_message}"

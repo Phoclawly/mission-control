@@ -155,6 +155,10 @@ describe('middleware — auth enabled (MC_API_TOKEN = test-secret)', () => {
   const TOKEN = 'test-secret-xyz';
   let middleware: NextMiddleware;
 
+  // Use a Tailscale IP for auth tests — passes IP allowlist but does NOT
+  // hit the localhost bypass (middleware skips auth for 127.0.0.1/::1).
+  const TAILSCALE_IP = '100.100.1.1';
+
   beforeAll(async () => {
     process.env.MC_API_TOKEN = TOKEN;
     delete process.env.DEMO_MODE;
@@ -169,7 +173,7 @@ describe('middleware — auth enabled (MC_API_TOKEN = test-secret)', () => {
 
   // TC-NEG-004: missing auth header
   it('returns 401 for /api/* with no Authorization header (TC-NEG-004)', () => {
-    const req = makeReq('http://localhost/api/tasks', { xForwardedFor: '127.0.0.1' });
+    const req = makeReq('http://localhost/api/tasks', { xForwardedFor: TAILSCALE_IP });
     const res = middleware(req, {} as never);
     expect(status(res as NextResponse)).toBe(401);
   });
@@ -177,7 +181,7 @@ describe('middleware — auth enabled (MC_API_TOKEN = test-secret)', () => {
   // TC-NEG-003: invalid token
   it('returns 401 for invalid Bearer token (TC-NEG-003)', () => {
     const req = makeReq('http://localhost/api/tasks', {
-      xForwardedFor: '127.0.0.1',
+      xForwardedFor: TAILSCALE_IP,
       authorization: 'Bearer wrong-token',
     });
     const res = middleware(req, {} as never);
@@ -186,7 +190,7 @@ describe('middleware — auth enabled (MC_API_TOKEN = test-secret)', () => {
 
   it('returns 401 for malformed auth header (not Bearer)', () => {
     const req = makeReq('http://localhost/api/tasks', {
-      xForwardedFor: '127.0.0.1',
+      xForwardedFor: TAILSCALE_IP,
       authorization: `Basic ${TOKEN}`,
     });
     const res = middleware(req, {} as never);
@@ -195,9 +199,17 @@ describe('middleware — auth enabled (MC_API_TOKEN = test-secret)', () => {
 
   it('allows /api/* with correct Bearer token', () => {
     const req = makeReq('http://localhost/api/tasks', {
-      xForwardedFor: '127.0.0.1',
+      xForwardedFor: TAILSCALE_IP,
       authorization: `Bearer ${TOKEN}`,
     });
+    const res = middleware(req, {} as never);
+    expect(status(res as NextResponse)).not.toBe(401);
+    expect(status(res as NextResponse)).not.toBe(403);
+  });
+
+  // Localhost bypasses auth (agent callbacks from same container)
+  it('allows localhost without auth when MC_API_TOKEN is set', () => {
+    const req = makeReq('http://localhost/api/tasks', { xForwardedFor: '127.0.0.1' });
     const res = middleware(req, {} as never);
     expect(status(res as NextResponse)).not.toBe(401);
     expect(status(res as NextResponse)).not.toBe(403);
@@ -216,7 +228,7 @@ describe('middleware — auth enabled (MC_API_TOKEN = test-secret)', () => {
   // TC-SEC-004: invalid token + valid IP → 401 (auth checked after IP)
   it('returns 401 for invalid token from allowed IP (TC-SEC-004)', () => {
     const req = makeReq('http://localhost/api/tasks', {
-      xForwardedFor: '127.0.0.1',
+      xForwardedFor: TAILSCALE_IP,
       authorization: 'Bearer bad',
     });
     const res = middleware(req, {} as never);
@@ -226,7 +238,7 @@ describe('middleware — auth enabled (MC_API_TOKEN = test-secret)', () => {
   // Same-origin browser requests bypass token check
   it('allows same-origin request (Origin matches host)', () => {
     const req = makeReq('http://localhost:4000/api/tasks', {
-      xForwardedFor: '127.0.0.1',
+      xForwardedFor: TAILSCALE_IP,
       origin: 'http://localhost:4000',
       host: 'localhost:4000',
     });
@@ -236,7 +248,7 @@ describe('middleware — auth enabled (MC_API_TOKEN = test-secret)', () => {
 
   it('allows same-origin request (Referer matches host)', () => {
     const req = makeReq('http://localhost:4000/api/tasks', {
-      xForwardedFor: '127.0.0.1',
+      xForwardedFor: TAILSCALE_IP,
       referer: 'http://localhost:4000/tasks',
       host: 'localhost:4000',
     });
@@ -246,7 +258,7 @@ describe('middleware — auth enabled (MC_API_TOKEN = test-secret)', () => {
 
   it('blocks request where Referer is a different host', () => {
     const req = makeReq('http://localhost:4000/api/tasks', {
-      xForwardedFor: '127.0.0.1',
+      xForwardedFor: TAILSCALE_IP,
       referer: 'http://evil.com/page',
       host: 'localhost:4000',
     });
@@ -257,7 +269,7 @@ describe('middleware — auth enabled (MC_API_TOKEN = test-secret)', () => {
   // SSE endpoint: token via query param
   it('allows /api/events/stream with token as query param', () => {
     const req = makeReq(`http://localhost/api/events/stream?token=${TOKEN}`, {
-      xForwardedFor: '127.0.0.1',
+      xForwardedFor: TAILSCALE_IP,
     });
     const res = middleware(req, {} as never);
     expect(status(res as NextResponse)).not.toBe(401);
@@ -265,7 +277,7 @@ describe('middleware — auth enabled (MC_API_TOKEN = test-secret)', () => {
 
   it('blocks /api/events/stream with wrong query token', () => {
     const req = makeReq('http://localhost/api/events/stream?token=wrong', {
-      xForwardedFor: '127.0.0.1',
+      xForwardedFor: TAILSCALE_IP,
     });
     const res = middleware(req, {} as never);
     expect(status(res as NextResponse)).toBe(401);
@@ -273,7 +285,7 @@ describe('middleware — auth enabled (MC_API_TOKEN = test-secret)', () => {
 
   // TC-SEC-005: No stack traces / framework info in error responses
   it('401 response body is minimal JSON — no stack traces', async () => {
-    const req = makeReq('http://localhost/api/tasks', { xForwardedFor: '127.0.0.1' });
+    const req = makeReq('http://localhost/api/tasks', { xForwardedFor: TAILSCALE_IP });
     const res = middleware(req, {} as never) as NextResponse;
     const body = await res.json();
     expect(body).toEqual({ error: 'Unauthorized' });

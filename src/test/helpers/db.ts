@@ -70,6 +70,12 @@ export function resetTables(): void {
   if (!_db) throw new Error('setupTestDb() was not called');
   _db.pragma('foreign_keys = OFF');
   _db.exec(`
+    DELETE FROM agent_memory_index;
+    DELETE FROM health_checks;
+    DELETE FROM cron_jobs;
+    DELETE FROM agent_capabilities;
+    DELETE FROM capabilities;
+    DELETE FROM integrations;
     DELETE FROM task_deliverables;
     DELETE FROM task_activities;
     DELETE FROM openclaw_sessions;
@@ -196,6 +202,77 @@ export function seedTask(
     ]
   );
   return task;
+}
+
+// ─── Capabilities system seed helpers ─────────────────────────────────────────
+
+export interface SeedCapability { id: string; name: string; category: string; status: string }
+export function seedCapability(
+  overrides: Partial<{
+    id: string; name: string; category: string; description: string;
+    provider: string; version: string; status: string; is_shared: number;
+  }> = {}
+): SeedCapability {
+  const cap: SeedCapability = {
+    id:       overrides.id       ?? uuidv4(),
+    name:     overrides.name     ?? 'Test Capability',
+    category: overrides.category ?? 'cli_tool',
+    status:   overrides.status   ?? 'unknown',
+  };
+  const now = new Date().toISOString();
+  dbRun(
+    `INSERT INTO capabilities (id, name, category, description, provider, version, is_shared, status, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [cap.id, cap.name, cap.category, overrides.description ?? null, overrides.provider ?? null,
+     overrides.version ?? null, overrides.is_shared ?? 1, cap.status, now, now]
+  );
+  return cap;
+}
+
+export interface SeedIntegration { id: string; name: string; type: string; status: string }
+export function seedIntegration(
+  overrides: Partial<{
+    id: string; name: string; type: string; provider: string; status: string;
+    credential_source: string;
+  }> = {}
+): SeedIntegration {
+  const integ: SeedIntegration = {
+    id:     overrides.id     ?? uuidv4(),
+    name:   overrides.name   ?? 'Test Integration',
+    type:   overrides.type   ?? 'api_key',
+    status: overrides.status ?? 'unknown',
+  };
+  const now = new Date().toISOString();
+  dbRun(
+    `INSERT INTO integrations (id, name, type, provider, status, credential_source, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    [integ.id, integ.name, integ.type, overrides.provider ?? null,
+     integ.status, overrides.credential_source ?? null, now, now]
+  );
+  return integ;
+}
+
+export interface SeedCronJob { id: string; name: string; agent_id: string | null; status: string }
+export function seedCronJob(
+  overrides: Partial<{
+    id: string; name: string; schedule: string; command: string;
+    agent_id: string | null; type: string; status: string; description: string;
+  }> = {}
+): SeedCronJob {
+  const cron: SeedCronJob = {
+    id:       overrides.id       ?? uuidv4(),
+    name:     overrides.name     ?? 'Test Cron',
+    agent_id: overrides.agent_id ?? null,
+    status:   overrides.status   ?? 'active',
+  };
+  const now = new Date().toISOString();
+  dbRun(
+    `INSERT INTO cron_jobs (id, name, schedule, command, agent_id, type, status, description, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [cron.id, cron.name, overrides.schedule ?? '0 7 * * *', overrides.command ?? 'echo test',
+     cron.agent_id, overrides.type ?? 'shell', cron.status, overrides.description ?? null, now, now]
+  );
+  return cron;
 }
 
 // ─── INITIATIVES.json helpers ─────────────────────────────────────────────────

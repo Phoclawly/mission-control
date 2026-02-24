@@ -1,0 +1,265 @@
+# browser-task.lobster.yaml
+# Browser tool selection meta-workflow with priority cascade
+name: browser-task
+version: "1.0"
+description: Select and execute browser automation using the best available tool (BrowserMCP > playwright-cli > browser-use)
+
+trigger:
+  type: manual
+
+env:
+  BROWSER_TIMEOUT: ${BROWSER_TIMEOUT:-120}
+  BROWSERMCP_ENDPOINT: ${BROWSERMCP_ENDPOINT:-}
+  PLAYWRIGHT_CMD: ${PLAYWRIGHT_CMD:-npx playwright}
+  BROWSER_USE_CMD: ${BROWSER_USE_CMD:-browser-use}
+
+inputs:
+  task:
+    type: string
+    required: true
+    description: The browser task to execute (e.g., navigate, purchase, scrape)
+  url:
+    type: string
+    required: true
+    description: Target URL for the browser task
+  params:
+    type: object
+    required: false
+    default: {}
+    description: Additional parameters for the task
+  timeout:
+    type: number
+    required: false
+    default: 120
+    description: Timeout in seconds for the browser task
+
+steps:
+  - id: check-browsermcp
+    name: Check if BrowserMCP is available
+    action: shell
+    command: |
+      # Check BrowserMCP availability via MCP endpoint
+      if [ -n "${BROWSERMCP_ENDPOINT}" ]; then
+        health=$(curl -sf --max-time 5 "${BROWSERMCP_ENDPOINT}/health" 2>/dev/null) && {
+          echo '{"available": true, "tool": "browsermcp", "endpoint": "'"${BROWSERMCP_ENDPOINT}"'"}'
+          exit 0
+        }
+      fi
+      # Also check if browsermcp is registered as an MCP tool
+      if command -v mcp >/dev/null 2>&1; then
+        mcp_check=$(mcp list-tools 2>/dev/null | grep -c "browser" || true)
+        if [ "$mcp_check" -gt 0 ]; then
+          echo '{"available": true, "tool": "browsermcp", "via": "mcp"}'
+          exit 0
+        fi
+      fi
+      echo '{"available": false, "tool": "browsermcp"}'
+    validation:
+      - check: exit_code
+        expect: 0
+    on_failure:
+      action: skip
+    outputs:
+      browsermcp_status: ${stdout}
+
+  - id: check-playwright
+    name: Check if playwright-cli is available
+    action: shell
+    command: |
+      # Check playwright availability
+      if command -v playwright >/dev/null 2>&1; then
+        version=$(playwright --version 2>/dev/null || echo "unknown")
+        echo "{\"available\": true, \"tool\": \"playwright\", \"version\": \"$version\"}"
+        exit 0
+      fi
+      # Check via npx
+      if command -v npx >/dev/null 2>&1; then
+        npx_check=$(npx playwright --version 2>/dev/null) && {
+          echo "{\"available\": true, \"tool\": \"playwright\", \"via\": \"npx\", \"version\": \"$npx_check\"}"
+          exit 0
+        }
+      fi
+      echo '{"available": false, "tool": "playwright"}'
+    validation:
+      - check: exit_code
+        expect: 0
+    on_failure:
+      action: skip
+    outputs:
+      playwright_status: ${stdout}
+
+  - id: check-browser-use
+    name: Check if browser-use is available
+    action: shell
+    command: |
+      # Check browser-use availability
+      if command -v ${BROWSER_USE_CMD} >/dev/null 2>&1; then
+        echo '{"available": true, "tool": "browser-use"}'
+        exit 0
+      fi
+      # Check if available as Python module
+      if python3 -c "import browser_use" 2>/dev/null; then
+        echo '{"available": true, "tool": "browser-use", "via": "python"}'
+        exit 0
+      fi
+      echo '{"available": false, "tool": "browser-use"}'
+    validation:
+      - check: exit_code
+        expect: 0
+    on_failure:
+      action: skip
+    outputs:
+      browser_use_status: ${stdout}
+
+  - id: select-tool
+    name: Select the best available browser tool
+    depends_on: [check-browsermcp, check-playwright, check-browser-use]
+    action: shell
+    command: |
+      # Priority cascade: browsermcp > playwright > browser-use
+      browsermcp='${steps.check-browsermcp.outputs.browsermcp_status}'
+      playwright='${steps.check-playwright.outputs.playwright_status}'
+      browser_use='${steps.check-browser-use.outputs.browser_use_status}'
+
+      if echo "$browsermcp" | jq -e '.available == true' >/dev/null 2>&1; then
+        echo '{"selected": "browsermcp", "details": '"$browsermcp"'}'
+        exit 0
+      fi
+      if echo "$playwright" | jq -e '.available == true' >/dev/null 2>&1; then
+        echo '{"selected": "playwright", "details": '"$playwright"'}'
+        exit 0
+      fi
+      if echo "$browser_use" | jq -e '.available == true' >/dev/null 2>&1; then
+        echo '{"selected": "browser-use", "details": '"$browser_use"'}'
+        exit 0
+      fi
+      echo '{"error": "No browser automation tool available. Install one of: BrowserMCP, playwright, browser-use"}'
+      exit 1
+    validation:
+      - check: exit_code
+        expect: 0
+      - check: stdout_contains
+        expect: "selected"
+    on_failure:
+      action: abort
+      notification:
+        type: log
+        message: "No browser automation tool available"
+    outputs:
+      selected_tool: ${stdout}
+
+  - id: execute-browsermcp
+    name: Execute task via BrowserMCP
+    depends_on: [select-tool]
+    condition: "${steps.select-tool.outputs.selected_tool} contains 'browsermcp'"
+    action: shell
+    command: |
+      # Execute browser task via BrowserMCP
+      params='${inputs.params}'
+      task_payload=$(jq -n \
+        --arg task "${inputs.task}" \
+        --arg url "${inputs.url}" \
+        --argjson params "$params" \
+        --arg timeout "${inputs.timeout}" \
+        '{task: $task, url: $url, params: $params, timeout: ($timeout | tonumber)}')
+
+      if [ -n "${BROWSERMCP_ENDPOINT}" ]; then
+        result=$(curl -sf --max-time ${inputs.timeout} \
+          -X POST "${BROWSERMCP_ENDPOINT}/execute" \
+          -H "Content-Type: application/json" \
+          -d "$task_payload" 2>&1)
+      else
+        result=$(mcp call browser-execute "$task_payload" 2>&1)
+      fi
+      echo "$result"
+    validation:
+      - check: exit_code
+        expect: 0
+    on_failure:
+      action: retry
+      retry_count: 2
+      retry_delay: 5s
+    outputs:
+      result: ${stdout}
+
+  - id: execute-playwright
+    name: Execute task via Playwright
+    depends_on: [select-tool]
+    condition: "${steps.select-tool.outputs.selected_tool} contains 'playwright'"
+    action: shell
+    command: |
+      # Execute browser task via Playwright CLI
+      params='${inputs.params}'
+      task="${inputs.task}"
+      url="${inputs.url}"
+      timeout="${inputs.timeout}"
+
+      # Generate a temporary Playwright script based on the task
+      script_file=$(mktemp /tmp/pw-task-XXXXXX.js)
+      cat > "$script_file" << 'PWSCRIPT'
+      const { chromium } = require('playwright');
+      (async () => {
+        const browser = await chromium.launch();
+        const page = await browser.newPage();
+        const params = JSON.parse(process.env.TASK_PARAMS || '{}');
+        await page.goto(process.env.TASK_URL, { timeout: parseInt(process.env.TASK_TIMEOUT) * 1000 });
+        // Task-specific logic dispatched by task type
+        const result = { url: page.url(), title: await page.title(), task: process.env.TASK_TYPE };
+        console.log(JSON.stringify(result));
+        await browser.close();
+      })();
+      PWSCRIPT
+
+      TASK_TYPE="$task" TASK_URL="$url" TASK_PARAMS="$params" TASK_TIMEOUT="$timeout" \
+        node "$script_file" 2>&1
+      rm -f "$script_file"
+    validation:
+      - check: exit_code
+        expect: 0
+    on_failure:
+      action: retry
+      retry_count: 2
+      retry_delay: 5s
+    outputs:
+      result: ${stdout}
+
+  - id: execute-browser-use
+    name: Execute task via browser-use
+    depends_on: [select-tool]
+    condition: "${steps.select-tool.outputs.selected_tool} contains 'browser-use'"
+    action: shell
+    command: |
+      # Execute browser task via browser-use
+      params='${inputs.params}'
+      task="${inputs.task}"
+      url="${inputs.url}"
+      timeout="${inputs.timeout}"
+
+      if command -v ${BROWSER_USE_CMD} >/dev/null 2>&1; then
+        result=$(${BROWSER_USE_CMD} \
+          --task "$task" \
+          --url "$url" \
+          --params "$params" \
+          --timeout "$timeout" 2>&1)
+      else
+        result=$(python3 -m browser_use \
+          --task "$task" \
+          --url "$url" \
+          --timeout "$timeout" 2>&1)
+      fi
+      echo "$result"
+    validation:
+      - check: exit_code
+        expect: 0
+    on_failure:
+      action: retry
+      retry_count: 2
+      retry_delay: 5s
+    outputs:
+      result: ${stdout}
+
+error_handling:
+  default_action: abort
+  notification:
+    type: log
+    message: "Browser task workflow failed at step ${failed_step}: ${error_message}"

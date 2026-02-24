@@ -6,7 +6,7 @@ export function sendWhatsApp(text: string, jid: string = SQUAD_OPS_JID): Promise
   return new Promise((resolve, reject) => {
     execFile(
       'node',
-      ['/app/openclaw.mjs', 'message', 'send', '--channel', 'whatsapp', '--target', jid, '--text', text],
+      ['/app/openclaw.mjs', 'message', 'send', '--channel', 'whatsapp', '-t', jid, '-m', text],
       { timeout: 15000 },
       (error) => {
         if (error) {

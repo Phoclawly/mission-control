@@ -35,8 +35,40 @@ function readJSON(filePath) {
   }
 }
 
+function readFileText(filePath) {
+  try {
+    return fs.readFileSync(filePath, 'utf8');
+  } catch {
+    return null;
+  }
+}
+
 function now() {
   return new Date().toISOString();
+}
+
+// ─── SOUL.md parser ─────────────────────────────────────────────────────────
+
+/**
+ * Parse agent name and role from SOUL.md header line.
+ * Matches patterns like:
+ *   "# SOUL.md — Apollo (Marketing & Creative)"
+ *   "# SOUL.md - Pho (Main Orchestrator)"
+ *   "# Argus — Ops & Monitoring"
+ */
+function parseAgentNameFromSoul(soulMd) {
+  if (!soulMd) return null;
+  // Pattern 1: "# SOUL.md — Name (Role)"
+  const match1 = soulMd.match(/^#\s+SOUL\.md\s*[—–-]\s*(\S+)(?:\s*\(([^)]+)\))?/m);
+  if (match1) return { name: match1[1], role: match1[2] || null };
+  // Pattern 2: "# Name — Role" (no SOUL.md prefix)
+  const match2 = soulMd.match(/^#\s+(\S+)\s*[—–-]\s*(.+)/m);
+  if (match2) return { name: match2[1], role: match2[2].trim() || null };
+  return null;
+}
+
+function capitalize(str) {
+  return str.charAt(0).toUpperCase() + str.slice(1);
 }
 
 // ─── Status mappers ──────────────────────────────────────────────────────────
@@ -155,15 +187,28 @@ function syncAgents(db) {
   const workspace_id = workspace ? workspace.id : null;
 
   // agents table columns: id, name, role, description, avatar_emoji, status,
-  //   is_master, workspace_id, soul_md, user_md, agents_md, model, created_at,
-  //   updated_at, system_id
+  //   is_master, workspace_id, soul_md, user_md, agents_md, tools_md, model,
+  //   current_activity, created_at, updated_at
   const upsert = db.prepare(`
-    INSERT INTO agents (id, name, role, status, description, workspace_id, created_at, updated_at)
-    VALUES (@id, @name, @role, @status, @description, @workspace_id, @created_at, @updated_at)
+    INSERT INTO agents (id, name, role, status, description, current_activity,
+      is_master, workspace_id,
+      soul_md, tools_md, user_md, agents_md,
+      created_at, updated_at)
+    VALUES (@id, @name, @role, @status, @description, @current_activity,
+      @is_master, @workspace_id,
+      @soul_md, @tools_md, @user_md, @agents_md,
+      @created_at, @updated_at)
     ON CONFLICT(id) DO UPDATE SET
-      status      = excluded.status,
-      description = excluded.description,
-      updated_at  = excluded.updated_at
+      status           = excluded.status,
+      current_activity = excluded.current_activity,
+      is_master        = excluded.is_master,
+      soul_md  = COALESCE(excluded.soul_md, agents.soul_md),
+      tools_md = COALESCE(excluded.tools_md, agents.tools_md),
+      user_md  = COALESCE(excluded.user_md, agents.user_md),
+      agents_md = COALESCE(excluded.agents_md, agents.agents_md),
+      name     = CASE WHEN excluded.name != excluded.id THEN excluded.name ELSE agents.name END,
+      role     = CASE WHEN excluded.role != excluded.id THEN excluded.role ELSE agents.role END,
+      updated_at = excluded.updated_at
   `);
 
   const syncMany = db.transaction((files) => {
@@ -175,32 +220,57 @@ function syncAgents(db) {
       const agentId = agentData.agent ||
         file.replace(/^agent-/, '').replace(/\.json$/, '');
 
-      // Build description from recent work / current task
-      const descParts = [];
+      // Read workspace markdown files
+      const wsBase = path.resolve(WORKSPACE, '..');
+      const wsDir = path.join(wsBase, `workspace-${agentId}`);
+      const soul_md = readFileText(path.join(wsDir, 'SOUL.md'));
+      const tools_md = readFileText(path.join(wsDir, 'TOOLS.md'));
+      const user_md = readFileText(path.join(wsDir, 'USER.md'));
+      const agents_md = readFileText(path.join(wsDir, 'AGENTS.md'));
+
+      // Parse name/role from SOUL.md header (preferred over agent-*.json)
+      const parsedSoul = parseAgentNameFromSoul(soul_md);
+      const name = parsedSoul?.name || agentData.name || capitalize(agentId);
+      const role = parsedSoul?.role || agentData.role || agentId;
+
+      // Build current_activity from task info (separate from description)
+      const activityParts = [];
       if (agentData.currentTask) {
         const ct = typeof agentData.currentTask === 'string'
           ? agentData.currentTask
           : JSON.stringify(agentData.currentTask);
-        descParts.push(`Current task: ${ct}`);
+        activityParts.push(`Current: ${ct}`);
       }
       if (agentData.last_task_description) {
-        descParts.push(`Last task: ${agentData.last_task_description}`);
+        activityParts.push(`Last: ${agentData.last_task_description}`);
       }
       if (agentData.initiative) {
-        descParts.push(`Initiative: ${agentData.initiative}`);
+        activityParts.push(`Initiative: ${agentData.initiative}`);
       }
       if (agentData.blockers?.length) {
-        descParts.push(`Blockers: ${agentData.blockers.length}`);
+        activityParts.push(`Blockers: ${agentData.blockers.length}`);
       }
-      const description = descParts.join(' | ');
+      const current_activity = activityParts.join(' | ') || null;
+
+      // Description: use agent-*.json description field only (not task info)
+      const description = agentData.description || null;
+
+      // Master orchestrator: pho or main agent
+      const is_master = (agentId === 'pho' || agentId === 'main') ? 1 : 0;
 
       upsert.run({
         id: agentId,
-        name: agentData.name || agentId,
-        role: agentData.role || agentId, // role NOT NULL — use id as fallback
+        name,
+        role,
         status: mapAgentStatus(agentData.status),
         description,
+        current_activity,
+        is_master,
         workspace_id,
+        soul_md,
+        tools_md,
+        user_md,
+        agents_md,
         created_at: agentData.lastUpdate || now(),
         updated_at: agentData.lastUpdate || now(),
       });

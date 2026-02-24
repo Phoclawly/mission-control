@@ -16,7 +16,7 @@ const EMOJI_OPTIONS = ['🤖', '🦞', '💻', '🔍', '✍️', '🎨', '📊',
 
 export function AgentModal({ agent, onClose, workspaceId, onAgentCreated }: AgentModalProps) {
   const { addAgent, updateAgent, agents } = useMissionControl();
-  const [activeTab, setActiveTab] = useState<'info' | 'soul' | 'user' | 'agents'>('info');
+  const [activeTab, setActiveTab] = useState<'info' | 'soul' | 'tools' | 'user' | 'agents'>('info');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [availableModels, setAvailableModels] = useState<string[]>([]);
   const [defaultModel, setDefaultModel] = useState<string>('');
@@ -30,6 +30,7 @@ export function AgentModal({ agent, onClose, workspaceId, onAgentCreated }: Agen
     status: agent?.status || 'standby' as AgentStatus,
     is_master: agent?.is_master || false,
     soul_md: agent?.soul_md || '',
+    tools_md: (agent as any)?.tools_md || '',
     user_md: agent?.user_md || '',
     agents_md: agent?.agents_md || '',
     model: agent?.model || '',
@@ -66,22 +67,43 @@ export function AgentModal({ agent, onClose, workspaceId, onAgentCreated }: Agen
       const url = agent ? `/api/agents/${agent.id}` : '/api/agents';
       const method = agent ? 'PATCH' : 'POST';
 
+      // Don't send status on update — it's auto-synced from VPS
+      const { status: _status, ...formWithoutStatus } = form;
+      const payload = agent ? formWithoutStatus : form;
+
       const res = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          ...form,
+          ...payload,
           workspace_id: workspaceId || agent?.workspace_id || 'default',
         }),
       });
 
       if (res.ok) {
         const savedAgent = await res.json();
+
+        // Write changes to VPS filesystem (model + markdown files)
+        try {
+          await fetch(`/api/agents/${savedAgent.id}/write-config`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              model: form.model || undefined,
+              soul_md: form.soul_md || undefined,
+              tools_md: form.tools_md || undefined,
+              user_md: form.user_md || undefined,
+              agents_md: form.agents_md || undefined,
+            }),
+          });
+        } catch (err) {
+          console.warn('Config write-back failed (non-blocking):', err);
+        }
+
         if (agent) {
           updateAgent(savedAgent);
         } else {
           addAgent(savedAgent);
-          // Notify parent if callback provided (e.g., for inline agent creation)
           if (onAgentCreated) {
             onAgentCreated(savedAgent.id);
           }
@@ -116,6 +138,7 @@ export function AgentModal({ agent, onClose, workspaceId, onAgentCreated }: Agen
   const tabs = [
     { id: 'info', label: 'Info' },
     { id: 'soul', label: 'SOUL.md' },
+    { id: 'tools', label: 'TOOLS.md' },
     { id: 'user', label: 'USER.md' },
     { id: 'agents', label: 'AGENTS.md' },
   ] as const;
@@ -217,19 +240,24 @@ export function AgentModal({ agent, onClose, workspaceId, onAgentCreated }: Agen
                 />
               </div>
 
-              {/* Status */}
-              <div>
-                <label className="block text-sm font-medium mb-1">Status</label>
-                <select
-                  value={form.status}
-                  onChange={(e) => setForm({ ...form, status: e.target.value as AgentStatus })}
-                  className="w-full bg-mc-bg border border-mc-border rounded px-3 py-2 text-sm focus:outline-none focus:border-mc-accent"
-                >
-                  <option value="standby">Standby</option>
-                  <option value="working">Working</option>
-                  <option value="offline">Offline</option>
-                </select>
-              </div>
+              {/* Status — read-only, synced from VPS */}
+              {agent && (
+                <div>
+                  <label className="block text-sm font-medium mb-1">Status</label>
+                  <div className="flex items-center gap-2">
+                    <span className={`text-xs px-2 py-0.5 rounded-full ${
+                      form.status === 'working'
+                        ? 'bg-mc-accent-green/20 text-mc-accent-green border border-mc-accent-green/30'
+                        : form.status === 'offline'
+                        ? 'bg-mc-accent-red/20 text-mc-accent-red border border-mc-accent-red/30'
+                        : 'bg-mc-accent-cyan/20 text-mc-accent-cyan border border-mc-accent-cyan/30'
+                    }`}>
+                      {form.status.toUpperCase()}
+                    </span>
+                    <span className="text-xs text-mc-text-secondary">Auto-synced from OpenClaw</span>
+                  </div>
+                </div>
+              )}
 
               {/* Master Toggle */}
               <div className="flex items-center gap-2">
@@ -287,6 +315,21 @@ export function AgentModal({ agent, onClose, workspaceId, onAgentCreated }: Agen
                 rows={15}
                 className="w-full bg-mc-bg border border-mc-border rounded px-3 py-2 text-sm font-mono focus:outline-none focus:border-mc-accent resize-none"
                 placeholder="# Agent Name&#10;&#10;Define this agent's personality, values, and communication style..."
+              />
+            </div>
+          )}
+
+          {activeTab === 'tools' && (
+            <div>
+              <label className="block text-sm font-medium mb-2">
+                TOOLS.md - Available Tools & Capabilities
+              </label>
+              <textarea
+                value={form.tools_md}
+                onChange={(e) => setForm({ ...form, tools_md: e.target.value })}
+                rows={15}
+                className="w-full bg-mc-bg border border-mc-border rounded px-3 py-2 text-sm font-mono focus:outline-none focus:border-mc-accent resize-none"
+                placeholder="# Tools&#10;&#10;Define the tools and capabilities available to this agent..."
               />
             </div>
           )}

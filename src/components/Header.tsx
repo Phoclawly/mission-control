@@ -1,9 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
-import { Zap, Settings, ChevronLeft, LayoutGrid } from 'lucide-react';
+import { Zap, Settings, ChevronLeft, LayoutGrid, Users } from 'lucide-react';
 import { useMissionControl } from '@/lib/store';
 import { format } from 'date-fns';
 import type { Workspace } from '@/lib/types';
@@ -14,6 +14,7 @@ interface HeaderProps {
 
 export function Header({ workspace }: HeaderProps) {
   const router = useRouter();
+  const pathname = usePathname();
   const { agents, tasks, isOnline } = useMissionControl();
   const [currentTime, setCurrentTime] = useState(new Date());
   const [activeSubAgents, setActiveSubAgents] = useState(0);
@@ -74,6 +75,17 @@ export function Header({ workspace }: HeaderProps) {
               <span className="text-lg">{workspace.icon}</span>
               <span className="font-medium">{workspace.name}</span>
             </div>
+            <Link
+              href={`/workspace/${workspace.slug}/agents`}
+              className={`flex items-center gap-1.5 px-3 py-1 rounded text-sm transition-colors ${
+                pathname?.includes('/agents')
+                  ? 'bg-mc-accent/20 text-mc-accent'
+                  : 'text-mc-text-secondary hover:text-mc-text hover:bg-mc-bg-tertiary'
+              }`}
+            >
+              <Users className="w-4 h-4" />
+              Agents
+            </Link>
           </div>
         ) : (
           <Link

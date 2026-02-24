@@ -34,7 +34,9 @@ CREATE TABLE IF NOT EXISTS agents (
   soul_md TEXT,
   user_md TEXT,
   agents_md TEXT,
+  tools_md TEXT,
   model TEXT,
+  current_activity TEXT,
   created_at TEXT DEFAULT (datetime('now')),
   updated_at TEXT DEFAULT (datetime('now'))
 );

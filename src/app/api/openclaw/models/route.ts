@@ -97,14 +97,8 @@ export async function GET() {
       }
     }
 
-    // Add some common models if none found
-    if (models.size === 0) {
-      models.add('anthropic/claude-sonnet-4-5');
-      models.add('anthropic/claude-opus-4-5');
-      models.add('anthropic/claude-haiku-4-5');
-      models.add('openai/gpt-4o');
-      models.add('openai/o1');
-    }
+    // If no models found, return empty — don't inject hardcoded fallbacks
+    // Models should only come from configured providers in openclaw.json
 
     return NextResponse.json<OpenClawModelsResponse>({
       defaultModel,

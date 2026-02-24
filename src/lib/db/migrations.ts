@@ -235,6 +235,30 @@ const migrations: Migration[] = [
       db.exec(`CREATE INDEX IF NOT EXISTS idx_tasks_initiative_id ON tasks(initiative_id)`);
       db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_tasks_source_external_request_id ON tasks(source, external_request_id) WHERE external_request_id IS NOT NULL`);
     }
+  },
+  {
+    id: '009',
+    name: 'add_agent_tools_md',
+    up: (db) => {
+      console.log('[Migration 009] Adding tools_md field to agents...');
+      const agentsInfo = db.prepare("PRAGMA table_info(agents)").all() as { name: string }[];
+      if (!agentsInfo.some(col => col.name === 'tools_md')) {
+        db.exec(`ALTER TABLE agents ADD COLUMN tools_md TEXT`);
+        console.log('[Migration 009] Added tools_md to agents');
+      }
+    }
+  },
+  {
+    id: '010',
+    name: 'add_agent_current_activity',
+    up: (db) => {
+      console.log('[Migration 010] Adding current_activity field to agents...');
+      const agentsInfo = db.prepare("PRAGMA table_info(agents)").all() as { name: string }[];
+      if (!agentsInfo.some(col => col.name === 'current_activity')) {
+        db.exec(`ALTER TABLE agents ADD COLUMN current_activity TEXT`);
+        console.log('[Migration 010] Added current_activity to agents');
+      }
+    }
   }
 ];
 

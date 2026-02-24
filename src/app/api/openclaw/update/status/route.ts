@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
 import { sendWhatsApp } from '@/lib/notify';
+import { appendArgusMemory } from '@/lib/argus-memory';
 
 const COMPLETED_DIR = '/home/node/.openclaw/escalation/completed';
 
@@ -36,6 +37,12 @@ export async function GET(request: Request) {
         ? `✅ *OpenClaw updated successfully* via Mission Control\nProcessed at ${data.processed_at || 'unknown'}`
         : `❌ *OpenClaw update failed*\nError: ${data.error || 'unknown'}\nProcessed at ${data.processed_at || 'unknown'}`;
       sendWhatsApp(msg).catch(() => {});
+
+      // Inject result into Argus memory
+      const memEntry = success
+        ? `OpenClaw update completed successfully via Mission Control. Processed at ${data.processed_at || 'unknown'}.`
+        : `OpenClaw update FAILED via Mission Control. Error: ${data.error || 'unknown'}. Processed at ${data.processed_at || 'unknown'}. Requires manual investigation.`;
+      appendArgusMemory(memEntry);
     }
 
     return NextResponse.json({

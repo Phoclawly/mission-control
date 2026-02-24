@@ -10,6 +10,7 @@ interface IntegrationCardProps {
   integration: Integration;
   onTestConnection: (id: string) => void;
   onUpdate?: (updated: Integration) => void;
+  highlightFailed?: boolean;
 }
 
 function getStatusIndicator(status: IntegrationStatus) {
@@ -54,7 +55,7 @@ const typeLabels: Record<string, string> = {
   credential_provider: 'Credential Provider',
 };
 
-export function IntegrationCard({ integration, onTestConnection, onUpdate }: IntegrationCardProps) {
+export function IntegrationCard({ integration, onTestConnection, onUpdate, highlightFailed }: IntegrationCardProps) {
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [isTestingConnection, setIsTestingConnection] = useState(false);
   const [testResult, setTestResult] = useState<string | null>(null);
@@ -85,7 +86,11 @@ export function IntegrationCard({ integration, onTestConnection, onUpdate }: Int
 
   return (
     <>
-      <div className="bg-mc-bg-secondary border border-mc-border rounded-lg p-4 hover:border-mc-accent/50 transition-colors">
+      <div className={`bg-mc-bg-secondary border rounded-lg p-4 transition-all duration-500 ${
+        highlightFailed
+          ? 'border-mc-accent-red shadow-[0_0_12px_rgba(239,68,68,0.4)] animate-pulse'
+          : 'border-mc-border hover:border-mc-accent/50'
+      }`}>
         <div className="flex items-start justify-between mb-3">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-mc-accent-purple/10 rounded-lg">

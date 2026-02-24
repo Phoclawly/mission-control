@@ -3,6 +3,8 @@ import { queryOne, run } from '@/lib/db';
 import { v4 as uuidv4 } from 'uuid';
 import { broadcast } from '@/lib/events';
 import { execSync } from 'child_process';
+import fs from 'fs';
+import path from 'path';
 import type { Integration, HealthCheck } from '@/lib/types';
 
 interface TestResult {
@@ -42,26 +44,41 @@ function resolveCredential(credentialSource: string): { value: string | null; me
     return { value: process.env[varName] || null, method: 'env' };
   }
 
-  // 1password:Vault/Item pattern
+  // 1password:Vault/Item pattern — try common field names until one works
   if (credentialSource.startsWith('1password:')) {
     const itemPath = credentialSource.slice(10);
-    try {
-      const value = runCmd(`op read "op://${itemPath}/credential"`, 15_000);
-      return { value: value || null, method: '1password' };
-    } catch {
-      // Try without /credential suffix (some items use /password or /api_key)
+    const fieldNames = ['credential', 'password', 'api_key', 'api key', 'secret', 'token', 'notesPlain'];
+    for (const field of fieldNames) {
       try {
-        const value = runCmd(`op read "op://${itemPath}/password"`, 15_000);
-        return { value: value || null, method: '1password' };
+        const value = runCmd(`op read "op://${itemPath}/${field}"`, 15_000);
+        if (value && value.length > 0) {
+          return { value, method: '1password' };
+        }
       } catch {
-        return { value: null, method: '1password' };
+        // Field doesn't exist, try next
       }
     }
+    return { value: null, method: '1password' };
   }
 
-  // openclaw.json:KEY pattern (env var alias)
+  // openclaw.json:KEY pattern — read from gateway config file, then fall back to env
   if (credentialSource.startsWith('openclaw.json:')) {
     const varName = credentialSource.slice(14);
+    // Try reading from openclaw.json env.vars
+    const configPaths = [
+      path.join(process.env.HOME || '/home/node', '.openclaw', 'openclaw.json'),
+      '/home/node/.openclaw/openclaw.json',
+    ];
+    for (const cfgPath of configPaths) {
+      try {
+        if (fs.existsSync(cfgPath)) {
+          const config = JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
+          const val = config?.env?.vars?.[varName];
+          if (val) return { value: val, method: 'openclaw.json' };
+        }
+      } catch { /* ignore parse errors */ }
+    }
+    // Fall back to process.env
     return { value: process.env[varName] || null, method: 'env' };
   }
 
@@ -177,7 +194,7 @@ async function validateApiKey(provider: string, apiKey: string): Promise<{ ok: b
           method: 'POST',
           headers: { Authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
           body: JSON.stringify({ model: 'sonar', messages: [{ role: 'user', content: 'hi' }], max_tokens: 1 }),
-          signal: AbortSignal.timeout(15_000),
+          signal: AbortSignal.timeout(30_000),
         });
         if (res.ok) return { ok: true, detail: 'API key valid' };
         if (res.status === 401) return { ok: false, detail: 'Invalid API key (401)' };
@@ -186,7 +203,7 @@ async function validateApiKey(provider: string, apiKey: string): Promise<{ ok: b
       }
 
       case 'agentmail': {
-        const res = await fetch('https://api.agentmail.to/v0/mailboxes?limit=1', {
+        const res = await fetch('https://api.agentmail.to/v0/inboxes', {
           headers: { Authorization: `Bearer ${apiKey}` },
           signal: AbortSignal.timeout(10_000),
         });

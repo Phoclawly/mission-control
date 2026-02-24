@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { ChevronLeft, Shield, Plug, Clock, Activity } from 'lucide-react';
+import { ChevronLeft, Shield, Plug, Clock, Activity, PlayCircle, Loader2, CheckCircle2, XCircle } from 'lucide-react';
 import { Header } from '@/components/Header';
 import { CapabilitiesOverview } from '@/components/CapabilitiesOverview';
 import { AlertsBanner } from '@/components/AlertsBanner';
@@ -42,6 +42,12 @@ export default function CapabilitiesPage() {
   // Integration modal state
   const [integrationModalOpen, setIntegrationModalOpen] = useState(false);
   const [editingIntegration, setEditingIntegration] = useState<Integration | undefined>(undefined);
+
+  // Test All Integrations state
+  const [testAllRunning, setTestAllRunning] = useState(false);
+  const [testAllProgress, setTestAllProgress] = useState({ completed: 0, total: 0 });
+  const [testAllResults, setTestAllResults] = useState<{ passed: number; failed: number; failedIds: Set<string> } | null>(null);
+  const [failedHighlightIds, setFailedHighlightIds] = useState<Set<string>>(new Set());
 
   // Connect to SSE for real-time updates
   useSSE();
@@ -139,6 +145,58 @@ export default function CapabilitiesPage() {
   const handleIntegrationUpdated = (updated: Integration) => {
     setIntegrations((prev) => prev.map((i) => (i.id === updated.id ? updated : i)));
   };
+
+  const handleTestAllIntegrations = useCallback(async () => {
+    if (testAllRunning || integrations.length === 0) return;
+
+    setTestAllRunning(true);
+    setTestAllResults(null);
+    setFailedHighlightIds(new Set());
+    setTestAllProgress({ completed: 0, total: integrations.length });
+
+    let passed = 0;
+    let failed = 0;
+    const failedIds = new Set<string>();
+
+    const promises = integrations.map(async (integration) => {
+      try {
+        const res = await fetch(`/api/integrations/${integration.id}/test`, { method: 'POST' });
+        if (res.ok) {
+          const updated = await res.json();
+          setIntegrations((prev) =>
+            prev.map((i) => (i.id === integration.id ? updated : i))
+          );
+          if (updated.status === 'connected') {
+            passed++;
+          } else {
+            failed++;
+            failedIds.add(integration.id);
+          }
+        } else {
+          failed++;
+          failedIds.add(integration.id);
+        }
+      } catch {
+        failed++;
+        failedIds.add(integration.id);
+      }
+      setTestAllProgress((prev) => ({ ...prev, completed: prev.completed + 1 }));
+    });
+
+    await Promise.all(promises);
+
+    setTestAllRunning(false);
+    setTestAllResults({ passed, failed, failedIds });
+    setFailedHighlightIds(failedIds);
+
+    // Clear the red highlight after 6 seconds
+    if (failedIds.size > 0) {
+      setTimeout(() => setFailedHighlightIds(new Set()), 6000);
+    }
+
+    // Clear the summary message after 10 seconds
+    setTimeout(() => setTestAllResults(null), 10000);
+  }, [testAllRunning, integrations]);
 
   if (notFound) {
     return (
@@ -239,16 +297,56 @@ export default function CapabilitiesPage() {
                 <p className="text-mc-text-secondary">No integrations configured.</p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {integrations.map((integration) => (
-                  <IntegrationCard
-                    key={integration.id}
-                    integration={integration}
-                    onTestConnection={handleTestConnection}
-                    onUpdate={handleIntegrationUpdated}
-                  />
-                ))}
-              </div>
+              <>
+                {/* Test All toolbar */}
+                <div className="flex items-center gap-3 mb-4">
+                  <button
+                    onClick={handleTestAllIntegrations}
+                    disabled={testAllRunning}
+                    className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg bg-mc-bg-secondary border border-mc-border text-mc-text hover:border-mc-accent/50 hover:text-mc-accent transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                  >
+                    {testAllRunning ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <PlayCircle className="w-4 h-4" />
+                    )}
+                    {testAllRunning
+                      ? `Testing ${testAllProgress.completed}/${testAllProgress.total}...`
+                      : 'Test All Integrations'}
+                  </button>
+
+                  {/* Summary message */}
+                  {testAllResults && !testAllRunning && (
+                    <div className={`flex items-center gap-2 px-3 py-1.5 text-sm rounded-lg border ${
+                      testAllResults.failed === 0
+                        ? 'bg-mc-accent-green/10 border-mc-accent-green/30 text-mc-accent-green'
+                        : 'bg-mc-accent-red/10 border-mc-accent-red/30 text-mc-accent-red'
+                    }`}>
+                      {testAllResults.failed === 0 ? (
+                        <CheckCircle2 className="w-4 h-4" />
+                      ) : (
+                        <XCircle className="w-4 h-4" />
+                      )}
+                      <span>
+                        {testAllResults.passed}/{testAllResults.passed + testAllResults.failed} connected
+                        {testAllResults.failed > 0 && `, ${testAllResults.failed} failed`}
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {integrations.map((integration) => (
+                    <IntegrationCard
+                      key={integration.id}
+                      integration={integration}
+                      onTestConnection={handleTestConnection}
+                      onUpdate={handleIntegrationUpdated}
+                      highlightFailed={failedHighlightIds.has(integration.id)}
+                    />
+                  ))}
+                </div>
+              </>
             )}
           </div>
         )}

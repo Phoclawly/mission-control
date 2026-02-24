@@ -65,6 +65,8 @@ CREATE TABLE IF NOT EXISTS tasks (
   task_type TEXT DEFAULT 'openclaw-native',
   task_type_config TEXT,
   evaluation_status TEXT DEFAULT 'none' CHECK (evaluation_status IN ('none', 'pending', 'running', 'completed', 'skipped')),
+  completion_summary TEXT,
+  completed_at TEXT,
   created_at TEXT DEFAULT (datetime('now')),
   updated_at TEXT DEFAULT (datetime('now'))
 );

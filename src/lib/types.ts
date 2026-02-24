@@ -70,6 +70,8 @@ export interface Task {
   source?: string;
   task_type: TaskType;
   task_type_config?: string;
+  completion_summary?: string;
+  completed_at?: string;
   created_at: string;
   updated_at: string;
   // Joined fields

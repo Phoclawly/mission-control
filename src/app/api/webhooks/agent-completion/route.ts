@@ -122,12 +122,20 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Task not found' }, { status: 404 });
       }
 
+      const completionSummary = body.summary || 'Task finished';
+
       // Only move to testing if not already in testing, review, or done
       // (Don't overwrite user's approval or testing results)
       if (task.status !== 'testing' && task.status !== 'review' && task.status !== 'done') {
         run(
-          'UPDATE tasks SET status = ?, updated_at = ? WHERE id = ?',
-          ['testing', now, task.id]
+          'UPDATE tasks SET status = ?, completion_summary = ?, completed_at = ?, updated_at = ? WHERE id = ?',
+          ['testing', completionSummary, now, now, task.id]
+        );
+      } else {
+        // Still save the summary even if status doesn't change
+        run(
+          'UPDATE tasks SET completion_summary = ?, completed_at = ?, updated_at = ? WHERE id = ?',
+          [completionSummary, now, now, task.id]
         );
       }
 
@@ -140,7 +148,7 @@ export async function POST(request: NextRequest) {
           'task_completed',
           task.assigned_agent_id,
           task.id,
-          `${task.assigned_agent_name} completed: ${body.summary || 'Task finished'}`,
+          `${task.assigned_agent_name} completed: ${completionSummary}`,
           now
         ]
       );
@@ -160,6 +168,7 @@ export async function POST(request: NextRequest) {
         success: true,
         task_id: task.id,
         new_status: 'testing',
+        completion_summary: completionSummary,
         message: 'Task moved to testing for automated verification'
       });
     }
@@ -213,8 +222,14 @@ export async function POST(request: NextRequest) {
       // (Don't overwrite user's approval or testing results)
       if (task.status !== 'testing' && task.status !== 'review' && task.status !== 'done') {
         run(
-          'UPDATE tasks SET status = ?, updated_at = ? WHERE id = ?',
-          ['testing', now, task.id]
+          'UPDATE tasks SET status = ?, completion_summary = ?, completed_at = ?, updated_at = ? WHERE id = ?',
+          ['testing', summary, now, now, task.id]
+        );
+      } else {
+        // Still save the summary even if status doesn't change
+        run(
+          'UPDATE tasks SET completion_summary = ?, completed_at = ?, updated_at = ? WHERE id = ?',
+          [summary, now, now, task.id]
         );
       }
 
@@ -245,7 +260,7 @@ export async function POST(request: NextRequest) {
         success: true,
         task_id: task.id,
         agent_id: session.agent_id,
-        summary,
+        completion_summary: summary,
         new_status: 'testing',
         message: 'Task moved to testing for automated verification'
       });

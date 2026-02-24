@@ -500,6 +500,22 @@ const migrations: Migration[] = [
 
       console.log('[Migration 016] agent_learnings_index table created');
     }
+  },
+  {
+    id: '017',
+    name: 'add_completion_summary',
+    up: (db) => {
+      console.log('[Migration 017] Adding completion_summary and completed_at to tasks...');
+      const tasksInfo = db.prepare("PRAGMA table_info(tasks)").all() as { name: string }[];
+      if (!tasksInfo.some(col => col.name === 'completion_summary')) {
+        db.exec(`ALTER TABLE tasks ADD COLUMN completion_summary TEXT`);
+        console.log('[Migration 017] Added completion_summary to tasks');
+      }
+      if (!tasksInfo.some(col => col.name === 'completed_at')) {
+        db.exec(`ALTER TABLE tasks ADD COLUMN completed_at TEXT`);
+        console.log('[Migration 017] Added completed_at to tasks');
+      }
+    }
   }
 ];
 

@@ -13,6 +13,11 @@ const TaskStatus = z.enum([
 
 const TaskPriority = z.enum(['low', 'normal', 'high', 'urgent']);
 
+const TaskTypeEnum = z.enum([
+  'openclaw-native', 'claude-team', 'multi-hypothesis',
+  'e2e-validation', 'prd-flow', 'mcp-task',
+]);
+
 const ActivityType = z.enum([
   'spawned',
   'updated',
@@ -42,6 +47,9 @@ export const CreateTaskSchema = z.object({
   source: z.string().min(1).max(64).optional(),
   // Accept null and convert to undefined
   due_date: z.union([z.string(), z.null()]).optional().transform(v => v === null ? undefined : v),
+  task_type: TaskTypeEnum.optional().default('openclaw-native'),
+  // z.any() — config is a free-form JSON blob stored as TEXT; validated shapes are in task-types.ts
+  task_type_config: z.any().optional(),
 });
 
 export const UpdateTaskSchema = z.object({
@@ -54,6 +62,8 @@ export const UpdateTaskSchema = z.object({
   initiative_id: z.string().regex(/^INIT-\d+$/i, 'initiative_id must be INIT-XXX format').optional().transform(v => v?.toUpperCase()),
   external_request_id: z.string().min(1).max(255).optional(),
   source: z.string().min(1).max(64).optional(),
+  task_type: TaskTypeEnum.optional(),
+  task_type_config: z.any().optional(),
   updated_by_agent_id: AgentIdField.optional().transform(v => (v === '' || v === null) ? undefined : v),
 });
 

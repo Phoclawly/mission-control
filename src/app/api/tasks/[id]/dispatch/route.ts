@@ -3,8 +3,8 @@ import { v4 as uuidv4 } from 'uuid';
 import { queryOne, queryAll, run } from '@/lib/db';
 import { getOpenClawClient } from '@/lib/openclaw/client';
 import { broadcast } from '@/lib/events';
-import { getProjectsPath, getMissionControlUrl } from '@/lib/config';
 import type { Task, Agent, OpenClawSession } from '@/lib/types';
+import { buildDispatchMessage } from '@/lib/task-types';
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -132,60 +132,13 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
 
     // Build task message for agent
-    const priorityEmoji = {
-      low: '🔵',
-      normal: '⚪',
-      high: '🟡',
-      urgent: '🔴'
-    }[task.priority] || '⚪';
-
-    // Get project path for deliverables
-    const projectsPath = getProjectsPath();
-    const projectDir = task.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-    const taskProjectDir = `${projectsPath}/${projectDir}`;
-    const missionControlUrl = getMissionControlUrl();
-
-    const defaultTaskMessage = `${priorityEmoji} **NEW TASK ASSIGNED**
-
-**Title:** ${task.title}
-${task.description ? `**Description:** ${task.description}\n` : ''}
-**Priority:** ${task.priority.toUpperCase()}
-${task.due_date ? `**Due:** ${task.due_date}\n` : ''}
-**Task ID:** ${task.id}
-
-**OUTPUT DIRECTORY:** ${taskProjectDir}
-Create this directory and save all deliverables there.
-
-**MANDATORY POST-COMPLETION STEPS — Do ALL 3 in order using fetch_url or http tool:**
-
-Step 1: Register EACH deliverable file (repeat for every file you created):
-\`\`\`
-POST ${missionControlUrl}/api/tasks/${task.id}/deliverables
-Content-Type: application/json
-
-{"deliverable_type": "file", "title": "<filename>", "path": "<full_path_to_file>"}
-\`\`\`
-
-Step 2: Log completion activity:
-\`\`\`
-POST ${missionControlUrl}/api/tasks/${task.id}/activities
-Content-Type: application/json
-
-{"activity_type": "completed", "message": "<summary of what was done>"}
-\`\`\`
-
-Step 3: Move task to review (human will approve):
-\`\`\`
-PATCH ${missionControlUrl}/api/tasks/${task.id}
-Content-Type: application/json
-
-{"status": "review"}
-\`\`\`
-
-Do NOT skip any step. Do NOT set status to "done" — only "review". The human reviews and approves.
-
-When all 3 API calls succeed, reply with:
-\`TASK_COMPLETE: [brief summary]\``;
+    let defaultTaskMessage: string;
+    try {
+      defaultTaskMessage = buildDispatchMessage(task);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Unsupported task type';
+      return NextResponse.json({ error: msg }, { status: 400 });
+    }
 
     const overrideMessage = typeof body.override_message === 'string' ? body.override_message.trim() : '';
     const taskMessage = overrideMessage || defaultTaskMessage;

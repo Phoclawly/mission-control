@@ -165,6 +165,8 @@ export function seedTask(
     source: string;
     initiative_id: string | null;
     priority: string;
+    task_type: string;
+    task_type_config: string | null;
   }> = {}
 ): SeedTask {
   const task: SeedTask = {
@@ -178,15 +180,18 @@ export function seedTask(
     `INSERT INTO tasks
        (id, title, status, workspace_id, assigned_agent_id,
         external_request_id, source, initiative_id, priority,
+        task_type, task_type_config,
         created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       task.id, task.title, task.status, task.workspace_id,
-      overrides.assigned_agent_id  ?? null,
+      overrides.assigned_agent_id   ?? null,
       overrides.external_request_id ?? null,
       overrides.source              ?? 'mission-control',
       overrides.initiative_id       ?? null,
       overrides.priority            ?? 'normal',
+      overrides.task_type           ?? 'openclaw-native',
+      overrides.task_type_config    ?? null,
       now, now,
     ]
   );

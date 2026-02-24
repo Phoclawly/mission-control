@@ -92,6 +92,16 @@ export async function POST(request: NextRequest) {
     }
   };
 
+  const hasTaskTypeColumns = (): boolean => {
+    try {
+      const columns = queryAll<{ name: string }>('PRAGMA table_info(tasks)');
+      const names = new Set(columns.map(c => c.name));
+      return names.has('task_type') && names.has('task_type_config');
+    } catch {
+      return false;
+    }
+  };
+
   const appendPlannedInitiative = (initiativeId: string, title: string, externalRequestId?: string) => {
     try {
       const squadStatusPath = process.env.SQUAD_STATUS_PATH || '/home/node/.openclaw/workspace/intel/status';
@@ -163,6 +173,7 @@ export async function POST(request: NextRequest) {
     const source = validatedData.source || 'mission-control';
 
     const taskMetadataColumnsReady = hasTaskMetadataColumns();
+    const taskTypeColumnsReady = hasTaskTypeColumns();
 
     // Idempotent create for panel-originated requests
     if (validatedData.external_request_id && taskMetadataColumnsReady) {
@@ -187,27 +198,53 @@ export async function POST(request: NextRequest) {
 
     try {
       if (taskMetadataColumnsReady) {
-        run(
-          `INSERT INTO tasks (id, title, description, status, priority, assigned_agent_id, created_by_agent_id, workspace_id, business_id, due_date, initiative_id, external_request_id, source, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [
-            id,
-            validatedData.title,
-            validatedData.description || null,
-            status,
-            validatedData.priority || 'normal',
-            validatedData.assigned_agent_id || null,
-            validatedData.created_by_agent_id || null,
-            workspaceId,
-            validatedData.business_id || 'default',
-            validatedData.due_date || null,
-            validatedData.initiative_id || null,
-            validatedData.external_request_id || null,
-            source,
-            now,
-            now,
-          ]
-        );
+        if (taskTypeColumnsReady) {
+          run(
+            `INSERT INTO tasks (id, title, description, status, priority, assigned_agent_id, created_by_agent_id, workspace_id, business_id, due_date, initiative_id, external_request_id, source, task_type, task_type_config, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [
+              id,
+              validatedData.title,
+              validatedData.description || null,
+              status,
+              validatedData.priority || 'normal',
+              validatedData.assigned_agent_id || null,
+              validatedData.created_by_agent_id || null,
+              workspaceId,
+              validatedData.business_id || 'default',
+              validatedData.due_date || null,
+              validatedData.initiative_id || null,
+              validatedData.external_request_id || null,
+              source,
+              validatedData.task_type || 'openclaw-native',
+              validatedData.task_type_config ? JSON.stringify(validatedData.task_type_config) : null,
+              now,
+              now,
+            ]
+          );
+        } else {
+          run(
+            `INSERT INTO tasks (id, title, description, status, priority, assigned_agent_id, created_by_agent_id, workspace_id, business_id, due_date, initiative_id, external_request_id, source, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [
+              id,
+              validatedData.title,
+              validatedData.description || null,
+              status,
+              validatedData.priority || 'normal',
+              validatedData.assigned_agent_id || null,
+              validatedData.created_by_agent_id || null,
+              workspaceId,
+              validatedData.business_id || 'default',
+              validatedData.due_date || null,
+              validatedData.initiative_id || null,
+              validatedData.external_request_id || null,
+              source,
+              now,
+              now,
+            ]
+          );
+        }
       } else {
         run(
           `INSERT INTO tasks (id, title, description, status, priority, assigned_agent_id, created_by_agent_id, workspace_id, business_id, due_date, created_at, updated_at)

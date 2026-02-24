@@ -260,6 +260,23 @@ const migrations: Migration[] = [
       }
     }
   }
+  ,{
+    id: '011',
+    name: 'add_task_type_columns',
+    up: (db) => {
+      console.log('[Migration 011] Adding task_type columns to tasks...');
+      const tasksInfo = db.prepare("PRAGMA table_info(tasks)").all() as { name: string }[];
+      if (!tasksInfo.some(col => col.name === 'task_type')) {
+        db.exec(`ALTER TABLE tasks ADD COLUMN task_type TEXT DEFAULT 'openclaw-native'`);
+        console.log('[Migration 011] Added task_type to tasks');
+      }
+      if (!tasksInfo.some(col => col.name === 'task_type_config')) {
+        db.exec(`ALTER TABLE tasks ADD COLUMN task_type_config TEXT`);
+        console.log('[Migration 011] Added task_type_config to tasks');
+      }
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_tasks_task_type ON tasks(task_type)`);
+    }
+  }
 ];
 
 /**

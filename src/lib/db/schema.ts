@@ -62,6 +62,8 @@ CREATE TABLE IF NOT EXISTS tasks (
   planning_spec TEXT,
   planning_agents TEXT,
   planning_dispatch_error TEXT,
+  task_type TEXT DEFAULT 'openclaw-native',
+  task_type_config TEXT,
   created_at TEXT DEFAULT (datetime('now')),
   updated_at TEXT DEFAULT (datetime('now'))
 );
@@ -188,4 +190,5 @@ CREATE INDEX IF NOT EXISTS idx_activities_task ON task_activities(task_id, creat
 CREATE INDEX IF NOT EXISTS idx_deliverables_task ON task_deliverables(task_id);
 CREATE INDEX IF NOT EXISTS idx_openclaw_sessions_task ON openclaw_sessions(task_id);
 CREATE INDEX IF NOT EXISTS idx_planning_questions_task ON planning_questions(task_id, sort_order);
+CREATE INDEX IF NOT EXISTS idx_tasks_task_type ON tasks(task_type);
 `;

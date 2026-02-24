@@ -393,3 +393,46 @@ describe('GET /api/tasks', () => {
     expect(body.every((t) => t.workspace_id === ws1.id)).toBe(true);
   });
 });
+
+// ─── TC-TASK-005: Task type columns ───────────────────────────────────────────
+
+describe('POST /api/tasks — task type (TC-TASK-005)', () => {
+  it('default task_type is openclaw-native', async () => {
+    const ws = seedWorkspace();
+    const res = await postTask({ title: 'Default type task', workspace_id: ws.id });
+    expect(res.status).toBe(201);
+    const body = await res.json();
+    expect(body.task_type).toBe('openclaw-native');
+  });
+
+  it('explicit claude-team type is persisted', async () => {
+    const ws = seedWorkspace();
+    const res = await postTask({
+      title: 'Team task',
+      workspace_id: ws.id,
+      task_type: 'claude-team',
+      task_type_config: { team_size: 3, team_members: [] },
+    });
+    expect(res.status).toBe(201);
+    const body = await res.json();
+    expect(body.task_type).toBe('claude-team');
+  });
+
+  it('returns 400 for unknown task_type enum value', async () => {
+    const ws = seedWorkspace();
+    const res = await postTask({
+      title: 'Bad type',
+      workspace_id: ws.id,
+      task_type: 'not-a-valid-type',
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it('schema has task_type and task_type_config columns', () => {
+    seedWorkspace();
+    const columns = dbQueryAll<{ name: string }>('PRAGMA table_info(tasks)');
+    const names = columns.map((c) => c.name);
+    expect(names).toContain('task_type');
+    expect(names).toContain('task_type_config');
+  });
+});

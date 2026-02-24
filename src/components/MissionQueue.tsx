@@ -7,6 +7,7 @@ import { triggerAutoDispatch, shouldTriggerAutoDispatch } from '@/lib/auto-dispa
 import type { Task, TaskStatus } from '@/lib/types';
 import { TaskModal } from './TaskModal';
 import { formatDistanceToNow } from 'date-fns';
+import { getTaskTypeMetadata } from '@/lib/task-types';
 
 interface MissionQueueProps {
   workspaceId?: string;
@@ -239,7 +240,14 @@ function TaskCard({ task, onDragStart, onClick, isDragging }: TaskCardProps) {
         <h4 className="text-sm font-medium leading-snug line-clamp-2 mb-3">
           {task.title}
         </h4>
-        
+
+        {/* Task type badge (hidden for openclaw-native) */}
+        {task.task_type && task.task_type !== 'openclaw-native' && (
+          <span className={`inline-block text-[9px] font-bold px-1.5 py-0.5 rounded mb-2 ${getTaskTypeMetadata(task.task_type).badgeColor}`}>
+            {getTaskTypeMetadata(task.task_type).badge}
+          </span>
+        )}
+
         {/* Planning mode indicator */}
         {isPlanning && (
           <div className="flex items-center gap-2 mb-3 py-2 px-3 bg-purple-500/10 rounded-md border border-purple-500/20">

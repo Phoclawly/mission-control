@@ -9,7 +9,8 @@ import { DeliverablesList } from './DeliverablesList';
 import { SessionsList } from './SessionsList';
 import { PlanningTab } from './PlanningTab';
 import { AgentModal } from './AgentModal';
-import type { Task, TaskPriority, TaskStatus } from '@/lib/types';
+import type { Task, TaskPriority, TaskStatus, TaskType, ClaudeTeamConfig, MultiHypothesisConfig } from '@/lib/types';
+import { TASK_TYPE_REGISTRY, getTaskTypeMetadata } from '@/lib/task-types';
 
 type TabType = 'overview' | 'planning' | 'activity' | 'deliverables' | 'sessions';
 
@@ -39,6 +40,8 @@ export function TaskModal({ task, onClose, workspaceId }: TaskModalProps) {
     status: task?.status || 'inbox' as TaskStatus,
     assigned_agent_id: task?.assigned_agent_id || '',
     due_date: task?.due_date || '',
+    task_type: (task?.task_type || 'openclaw-native') as TaskType,
+    task_type_config: task?.task_type_config ? JSON.parse(task.task_type_config) as Record<string, unknown> : {} as Record<string, unknown>,
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -57,6 +60,8 @@ export function TaskModal({ task, onClose, workspaceId }: TaskModalProps) {
         due_date: form.due_date || null,
         workspace_id: workspaceId || task?.workspace_id || 'default',
         source: task?.source || 'mission-control',
+        task_type: form.task_type,
+        task_type_config: Object.keys(form.task_type_config).length > 0 ? form.task_type_config : undefined,
       };
 
       const res = await fetch(url, {
@@ -218,6 +223,47 @@ export function TaskModal({ task, onClose, workspaceId }: TaskModalProps) {
               placeholder="Add details..."
             />
           </div>
+
+          {/* Task Type Selector */}
+          <div>
+            <label className="block text-sm font-medium mb-1">Execution Type</label>
+            <select
+              value={form.task_type}
+              onChange={(e) => {
+                const newType = e.target.value as TaskType;
+                const meta = getTaskTypeMetadata(newType);
+                setForm({
+                  ...form,
+                  task_type: newType,
+                  task_type_config: (meta.defaultConfig || {}) as Record<string, unknown>,
+                });
+              }}
+              className="w-full bg-mc-bg border border-mc-border rounded px-3 py-2 text-sm focus:outline-none focus:border-mc-accent"
+            >
+              {TASK_TYPE_REGISTRY.map((meta) => (
+                <option key={meta.type} value={meta.type} disabled={!meta.isImplemented}>
+                  {meta.label}{!meta.isImplemented ? ' (coming soon)' : ''}
+                </option>
+              ))}
+            </select>
+            <p className="text-xs text-mc-text-secondary mt-1">
+              {getTaskTypeMetadata(form.task_type).description}
+            </p>
+          </div>
+
+          {/* Type-specific config panels */}
+          {form.task_type === 'claude-team' && (
+            <ClaudeTeamConfigPanel
+              config={form.task_type_config as unknown as ClaudeTeamConfig}
+              onChange={(config) => setForm({ ...form, task_type_config: config as unknown as Record<string, unknown> })}
+            />
+          )}
+          {form.task_type === 'multi-hypothesis' && (
+            <MultiHypothesisConfigPanel
+              config={form.task_type_config as unknown as MultiHypothesisConfig}
+              onChange={(config) => setForm({ ...form, task_type_config: config as unknown as Record<string, unknown> })}
+            />
+          )}
 
           {/* Planning Mode Toggle - only for new tasks */}
           {!task && (
@@ -391,6 +437,147 @@ export function TaskModal({ task, onClose, workspaceId }: TaskModalProps) {
           }}
         />
       )}
+    </div>
+  );
+}
+// ─── Type-specific config panels ─────────────────────────────────────────────
+
+function ClaudeTeamConfigPanel({
+  config,
+  onChange,
+}: {
+  config: ClaudeTeamConfig;
+  onChange: (c: ClaudeTeamConfig) => void;
+}) {
+  const members = config?.team_members || [];
+  return (
+    <div className="p-3 bg-mc-bg rounded-lg border border-purple-500/20 space-y-3">
+      <h4 className="text-xs font-semibold text-purple-400 uppercase tracking-wider">Claude Team Config</h4>
+      <div className="flex items-center gap-3">
+        <label className="text-xs text-mc-text-secondary">Team size</label>
+        <input
+          type="number"
+          min={1}
+          max={10}
+          value={config?.team_size || 2}
+          onChange={(e) => onChange({ ...config, team_size: Number(e.target.value) })}
+          className="w-16 bg-mc-bg-secondary border border-mc-border rounded px-2 py-1 text-xs text-center"
+        />
+        <label className="text-xs text-mc-text-secondary ml-2">Model</label>
+        <input
+          type="text"
+          value={config?.model || ''}
+          placeholder="e.g. claude-opus-4-6"
+          onChange={(e) => onChange({ ...config, model: e.target.value || undefined })}
+          className="flex-1 bg-mc-bg-secondary border border-mc-border rounded px-2 py-1 text-xs"
+        />
+      </div>
+      {members.map((m, i) => (
+        <div key={i} className="flex gap-2 items-center">
+          <input
+            type="text"
+            placeholder="Name"
+            value={m.name}
+            onChange={(e) => {
+              const updated = [...members];
+              updated[i] = { ...m, name: e.target.value };
+              onChange({ ...config, team_members: updated });
+            }}
+            className="flex-1 bg-mc-bg-secondary border border-mc-border rounded px-2 py-1 text-xs"
+          />
+          <input
+            type="text"
+            placeholder="Role"
+            value={m.role}
+            onChange={(e) => {
+              const updated = [...members];
+              updated[i] = { ...m, role: e.target.value };
+              onChange({ ...config, team_members: updated });
+            }}
+            className="flex-1 bg-mc-bg-secondary border border-mc-border rounded px-2 py-1 text-xs"
+          />
+          <input
+            type="text"
+            placeholder="Focus"
+            value={m.focus}
+            onChange={(e) => {
+              const updated = [...members];
+              updated[i] = { ...m, focus: e.target.value };
+              onChange({ ...config, team_members: updated });
+            }}
+            className="flex-1 bg-mc-bg-secondary border border-mc-border rounded px-2 py-1 text-xs"
+          />
+          <button
+            type="button"
+            onClick={() => onChange({ ...config, team_members: members.filter((_, j) => j !== i) })}
+            className="text-mc-accent-red hover:text-mc-accent-red/80 text-xs px-1"
+          >
+            ✕
+          </button>
+        </div>
+      ))}
+      <button
+        type="button"
+        onClick={() => onChange({ ...config, team_members: [...members, { name: '', role: '', focus: '' }] })}
+        className="flex items-center gap-1 text-xs text-purple-400 hover:text-purple-300"
+      >
+        <Plus className="w-3 h-3" /> Add member
+      </button>
+    </div>
+  );
+}
+
+function MultiHypothesisConfigPanel({
+  config,
+  onChange,
+}: {
+  config: MultiHypothesisConfig;
+  onChange: (c: MultiHypothesisConfig) => void;
+}) {
+  const hypotheses = config?.hypotheses || [];
+  return (
+    <div className="p-3 bg-mc-bg rounded-lg border border-cyan-500/20 space-y-3">
+      <h4 className="text-xs font-semibold text-cyan-400 uppercase tracking-wider">Parallel Hypotheses</h4>
+      {hypotheses.map((h, i) => (
+        <div key={i} className="flex gap-2 items-center">
+          <input
+            type="text"
+            placeholder="Label"
+            value={h.label}
+            onChange={(e) => {
+              const updated = [...hypotheses];
+              updated[i] = { ...h, label: e.target.value };
+              onChange({ ...config, hypotheses: updated });
+            }}
+            className="w-24 bg-mc-bg-secondary border border-mc-border rounded px-2 py-1 text-xs"
+          />
+          <input
+            type="text"
+            placeholder="Focus / approach"
+            value={h.focus_description}
+            onChange={(e) => {
+              const updated = [...hypotheses];
+              updated[i] = { ...h, focus_description: e.target.value };
+              onChange({ ...config, hypotheses: updated });
+            }}
+            className="flex-1 bg-mc-bg-secondary border border-mc-border rounded px-2 py-1 text-xs"
+          />
+          <button
+            type="button"
+            onClick={() => onChange({ ...config, hypotheses: hypotheses.filter((_, j) => j !== i) })}
+            className="text-mc-accent-red hover:text-mc-accent-red/80 text-xs px-1"
+          >
+            ✕
+          </button>
+        </div>
+      ))}
+      <button
+        type="button"
+        onClick={() => onChange({ ...config, hypotheses: [...hypotheses, { label: '', focus_description: '' }] })}
+        className="flex items-center gap-1 text-xs text-cyan-400 hover:text-cyan-300"
+      >
+        <Plus className="w-3 h-3" /> Add hypothesis
+      </button>
     </div>
   );
 }

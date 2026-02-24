@@ -391,3 +391,55 @@ describe('POST /api/tasks/[id]/dispatch — idempotency key', () => {
     }));
   });
 });
+
+// ─── TC-DISPATCH-006: Task type dispatch ──────────────────────────────────────
+
+describe('POST /api/tasks/[id]/dispatch — task type (TC-DISPATCH-006)', () => {
+  it('openclaw-native message contains NEW TASK ASSIGNED', async () => {
+    const ws = seedWorkspace({ slug: 'native-type-ws' });
+    const agent = seedAgent(ws.id, { name: 'Native Agent' });
+    const task = seedTask(ws.id, {
+      title: 'Build homepage',
+      assigned_agent_id: agent.id,
+      task_type: 'openclaw-native',
+    });
+
+    await postDispatch(task.id);
+
+    expect(mockCall).toHaveBeenCalledWith('chat.send', expect.objectContaining({
+      message: expect.stringContaining('NEW TASK ASSIGNED'),
+    }));
+  });
+
+  it('claude-team message contains TEAM TASK ASSIGNED', async () => {
+    const ws = seedWorkspace({ slug: 'team-type-ws' });
+    const agent = seedAgent(ws.id, { name: 'Team Agent' });
+    const task = seedTask(ws.id, {
+      title: 'Complex project',
+      assigned_agent_id: agent.id,
+      task_type: 'claude-team',
+      task_type_config: JSON.stringify({ team_size: 2, team_members: [] }),
+    });
+
+    await postDispatch(task.id);
+
+    expect(mockCall).toHaveBeenCalledWith('chat.send', expect.objectContaining({
+      message: expect.stringContaining('TEAM TASK ASSIGNED'),
+    }));
+  });
+
+  it('unimplemented type (e2e-validation) returns 400', async () => {
+    const ws = seedWorkspace({ slug: 'e2e-type-ws' });
+    const agent = seedAgent(ws.id, { name: 'E2E Agent' });
+    const task = seedTask(ws.id, {
+      title: 'E2E test',
+      assigned_agent_id: agent.id,
+      task_type: 'e2e-validation',
+    });
+
+    const res = await postDispatch(task.id);
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toMatch(/not yet implemented/i);
+  });
+});

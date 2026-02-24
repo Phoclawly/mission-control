@@ -6,6 +6,21 @@ export type TaskStatus = 'pending_dispatch' | 'planning' | 'inbox' | 'assigned' 
 
 export type TaskPriority = 'low' | 'normal' | 'high' | 'urgent';
 
+export type TaskType =
+  | 'openclaw-native' | 'claude-team' | 'multi-hypothesis'
+  | 'e2e-validation' | 'prd-flow' | 'mcp-task';
+
+export interface ClaudeTeamConfig {
+  team_size: number;
+  team_members: Array<{ name: string; focus: string; role: string }>;
+  model?: string;
+}
+
+export interface MultiHypothesisConfig {
+  hypotheses: Array<{ label: string; focus_description: string }>;
+  coordinator_agent_id?: string;
+}
+
 export type MessageType = 'text' | 'system' | 'task_update' | 'file';
 
 export type ConversationType = 'direct' | 'group' | 'task';
@@ -53,6 +68,8 @@ export interface Task {
   initiative_id?: string;
   external_request_id?: string;
   source?: string;
+  task_type: TaskType;
+  task_type_config?: string;
   created_at: string;
   updated_at: string;
   // Joined fields
@@ -253,6 +270,8 @@ export interface CreateTaskRequest {
   initiative_id?: string;
   external_request_id?: string;
   source?: string;
+  task_type?: TaskType;
+  task_type_config?: Record<string, unknown>;
 }
 
 export interface UpdateTaskRequest extends Partial<CreateTaskRequest> {

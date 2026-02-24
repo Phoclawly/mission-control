@@ -222,8 +222,9 @@ export function CapabilityModal({ capability, onClose, onSaved }: CapabilityModa
           {/* Skill Path — only shown when category is 'skill' */}
           {form.category === 'skill' && (
             <div>
-              <label className="block text-sm font-medium mb-1">Skill Path</label>
+              <label htmlFor="capability-skill-path" className="block text-sm font-medium mb-1">Skill Path</label>
               <input
+                id="capability-skill-path"
                 type="text"
                 value={form.skill_path}
                 onChange={setField('skill_path')}
@@ -275,8 +276,9 @@ export function CapabilityModal({ capability, onClose, onSaved }: CapabilityModa
 
           {/* Status */}
           <div>
-            <label className="block text-sm font-medium mb-1">Status</label>
+            <label htmlFor="capability-status" className="block text-sm font-medium mb-1">Status</label>
             <select
+              id="capability-status"
               value={form.status}
               onChange={setField('status')}
               className="w-full bg-mc-bg border border-mc-border rounded px-3 py-2 text-sm focus:outline-none focus:border-mc-accent"

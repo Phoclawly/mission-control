@@ -62,7 +62,8 @@ function SkillCard({ skill }: { skill: SkillWithAgents }) {
   const [contentLoading, setContentLoading] = useState(false);
   const [contentError, setContentError] = useState<string | null>(null);
 
-  const handleViewMd = async () => {
+  const handleViewMd = async (e: React.MouseEvent) => {
+    e.stopPropagation();
     // Collapse if already showing
     if (contentVisible) {
       setContentVisible(false);

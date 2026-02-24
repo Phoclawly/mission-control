@@ -67,12 +67,31 @@ function listSkills(skillsDir) {
         const skillPath = path.join(skillsDir, d.name);
         const skillJson = readJSON(path.join(skillPath, 'skill.json'));
         const hasSoul = fs.existsSync(path.join(skillPath, 'SOUL.md'));
-        if (!skillJson && !hasSoul) return null;
+        const hasSkillMd = fs.existsSync(path.join(skillPath, 'SKILL.md'));
+        if (!skillJson && !hasSoul && !hasSkillMd) return null;
+
+        // Extract description from SKILL.md frontmatter if no skill.json
+        let config = skillJson;
+        if (!config && hasSkillMd) {
+          try {
+            const content = fs.readFileSync(path.join(skillPath, 'SKILL.md'), 'utf8');
+            const fmMatch = content.match(/^---\n([\s\S]*?)\n---/);
+            if (fmMatch) {
+              const nameMatch = fmMatch[1].match(/^name:\s*(.+)/m);
+              const descMatch = fmMatch[1].match(/^description:\s*["']?(.+?)["']?\s*$/m);
+              config = {};
+              if (nameMatch) config.name = nameMatch[1].trim();
+              if (descMatch) config.description = descMatch[1].trim();
+            }
+          } catch {}
+        }
+
         return {
           name: d.name,
           path: skillPath,
-          config: skillJson,
+          config,
           hasSoul,
+          hasSkillMd,
         };
       })
       .filter(Boolean);

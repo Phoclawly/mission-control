@@ -36,7 +36,7 @@ test.describe('Capabilities redesign', () => {
     await page.waitForTimeout(2000);
     await page.getByRole('button', { name: /Integrations/i }).click();
     await page.waitForTimeout(1500);
-    await page.locator('button[aria-label="Edit integration"]').first().click();
+    await page.locator('button[title="Edit integration"]').first().click();
     await expect(page.getByText('Edit Integration')).toBeVisible();
     await expect(page.locator('input[name=name], input').first()).not.toBeEmpty();
   });

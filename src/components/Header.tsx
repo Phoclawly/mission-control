@@ -254,21 +254,34 @@ export function Header({ workspace }: HeaderProps) {
             <span className="text-xs font-mono text-mc-text-secondary">
               v{currentVersion}
             </span>
-            {updateAvailable && latestVersion ? (
-              updateRequested ? (
-                <span className="text-xs text-mc-accent-cyan animate-pulse">
-                  Queued
-                </span>
-              ) : (
-                <button
-                  onClick={triggerUpdate}
-                  className="flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-mc-accent-cyan/20 border border-mc-accent-cyan text-mc-accent-cyan hover:bg-mc-accent-cyan/30 transition-colors"
-                  title={`Update to v${latestVersion}`}
-                >
-                  <Download className="w-3 h-3" />
-                  v{latestVersion}
-                </button>
-              )
+            {updateState === 'success' ? (
+              <span className="flex items-center gap-1 text-xs font-medium text-mc-accent-green">
+                <CheckCircle className="w-3.5 h-3.5" />
+                Updated
+              </span>
+            ) : updateState === 'failed' ? (
+              <button
+                onClick={() => { setUpdateState('idle'); setUpdateError(null); }}
+                className="flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-mc-accent-red/20 border border-mc-accent-red text-mc-accent-red hover:bg-mc-accent-red/30 transition-colors"
+                title={updateError || 'Update failed — click to dismiss'}
+              >
+                <XCircle className="w-3.5 h-3.5" />
+                Failed
+              </button>
+            ) : updateState === 'queued' ? (
+              <span className="flex items-center gap-1 text-xs text-mc-accent-cyan animate-pulse">
+                <RefreshCw className="w-3 h-3 animate-spin" />
+                Updating...
+              </span>
+            ) : updateAvailable && latestVersion ? (
+              <button
+                onClick={triggerUpdate}
+                className="flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-mc-accent-cyan/20 border border-mc-accent-cyan text-mc-accent-cyan hover:bg-mc-accent-cyan/30 transition-colors"
+                title={`Update to v${latestVersion}`}
+              >
+                <Download className="w-3 h-3" />
+                v{latestVersion}
+              </button>
             ) : (
               <button
                 onClick={checkForUpdates}

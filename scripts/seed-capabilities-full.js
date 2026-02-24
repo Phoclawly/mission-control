@@ -29,6 +29,8 @@ function now() {
 
 // ─── Capability Definitions ─────────────────────────────────────────────────
 
+const SKILLS_BASE = '/home/node/.openclaw/workspace-main/skills';
+
 const capabilities = [
   // === SKILLS (repo skills/ directory) ===
   {
@@ -38,6 +40,8 @@ const capabilities = [
     description: 'Mandatory routing layer for all coding tasks. Routes to Cursor, Claude Code, RALF TUI, Oz, or Codex backends.',
     provider: 'custom',
     is_shared: 0,
+    workspace_id: 'default',
+    skill_path: SKILLS_BASE + '/coding_router.md',
   },
   {
     id: 'skill-code-supervisor',
@@ -46,6 +50,8 @@ const capabilities = [
     description: 'Claude Code headless supervisor. Single-file bug fixes and small code changes via background process.',
     provider: 'custom',
     is_shared: 0,
+    workspace_id: 'default',
+    skill_path: SKILLS_BASE + '/code_supervisor.md',
   },
   {
     id: 'skill-cursor-supervisor',
@@ -54,6 +60,8 @@ const capabilities = [
     description: 'Cursor CLI agent supervisor via tmux. General coding with multi-model AI (GPT-5, Claude, Gemini).',
     provider: 'custom',
     is_shared: 0,
+    workspace_id: 'default',
+    skill_path: SKILLS_BASE + '/cursor_supervisor.md',
   },
   {
     id: 'skill-codex-supervisor',
@@ -62,6 +70,8 @@ const capabilities = [
     description: 'OpenAI Codex headless supervisor. GPT model tasks via codex exec CLI.',
     provider: 'custom',
     is_shared: 0,
+    workspace_id: 'default',
+    skill_path: SKILLS_BASE + '/codex_supervisor.md',
   },
   {
     id: 'skill-ralph-supervisor',
@@ -70,6 +80,8 @@ const capabilities = [
     description: 'RALF TUI multi-task orchestrator. PRD-driven autonomous coding projects.',
     provider: 'custom',
     is_shared: 0,
+    workspace_id: 'default',
+    skill_path: SKILLS_BASE + '/ralph_supervisor.md',
   },
   {
     id: 'skill-oz-supervisor',
@@ -78,6 +90,8 @@ const capabilities = [
     description: 'Warp Oz cloud agent supervisor. Async background tasks on cloud VMs.',
     provider: 'custom',
     is_shared: 0,
+    workspace_id: 'default',
+    skill_path: SKILLS_BASE + '/oz_supervisor.md',
   },
   {
     id: 'skill-email-router',
@@ -86,6 +100,8 @@ const capabilities = [
     description: 'Route incoming emails from pho@agentmail.to to specialized handlers.',
     provider: 'custom',
     is_shared: 0,
+    workspace_id: 'default',
+    skill_path: SKILLS_BASE + '/email_router.md',
   },
   {
     id: 'skill-agentmail',
@@ -94,6 +110,8 @@ const capabilities = [
     description: 'Email management via AgentMail API. Send, receive, manage, archive emails for pho@agentmail.to.',
     provider: 'custom',
     is_shared: 0,
+    workspace_id: 'default',
+    skill_path: SKILLS_BASE + '/agentmail.md',
   },
   {
     id: 'skill-meetings-organizer-v2',
@@ -102,6 +120,8 @@ const capabilities = [
     description: 'Classify Google Meet transcripts and move them to correct Drive folder via Apps Script API.',
     provider: 'custom',
     is_shared: 0,
+    workspace_id: 'default',
+    skill_path: SKILLS_BASE + '/meetings_organizer_v2.md',
   },
   {
     id: 'skill-meets-transcripts-organizer',
@@ -110,6 +130,8 @@ const capabilities = [
     description: 'Process Gemini meeting note emails. Move Google Docs to Drive using browser relay.',
     provider: 'custom',
     is_shared: 0,
+    workspace_id: 'default',
+    skill_path: SKILLS_BASE + '/meets_transcripts_organizer.md',
   },
   {
     id: 'skill-notion-tasks',
@@ -118,6 +140,8 @@ const capabilities = [
     description: 'Manage Notion workspace with direct API calls. Create/query/update tasks, pages, databases.',
     provider: 'custom',
     is_shared: 0,
+    workspace_id: 'default',
+    skill_path: SKILLS_BASE + '/notion_tasks.md',
   },
   {
     id: 'skill-system-consultor',
@@ -126,6 +150,8 @@ const capabilities = [
     description: 'External diagnostic & repair agent. Runs Codex/Gemini/Claude to diagnose and fix system issues.',
     provider: 'custom',
     is_shared: 0,
+    workspace_id: 'default',
+    skill_path: SKILLS_BASE + '/system_consultor.md',
   },
   {
     id: 'skill-browser-use',
@@ -134,6 +160,8 @@ const capabilities = [
     description: 'Browser-Use Cloud API automation. Cloud mode with persistent profiles, anti-detection.',
     provider: 'browser-use',
     is_shared: 1,
+    workspace_id: null,
+    skill_path: SKILLS_BASE + '/browser_use.md',
   },
   {
     id: 'skill-agent-browser',
@@ -142,6 +170,8 @@ const capabilities = [
     description: 'Browser automation CLI wrapper. Delegates to browser-use remote mode.',
     provider: 'custom',
     is_shared: 1,
+    workspace_id: null,
+    skill_path: SKILLS_BASE + '/agent_browser.md',
   },
   {
     id: 'skill-browserstack-automation',
@@ -150,6 +180,8 @@ const capabilities = [
     description: 'Cross-browser screenshots, visual regression, video recording via BrowserStack.',
     provider: 'browserstack',
     is_shared: 0,
+    workspace_id: 'default',
+    skill_path: SKILLS_BASE + '/browserstack_automation.md',
   },
   {
     id: 'skill-frontend-design',
@@ -158,6 +190,8 @@ const capabilities = [
     description: 'Production-grade frontend interface design guidance. Avoids generic AI aesthetics.',
     provider: 'anthropic',
     is_shared: 0,
+    workspace_id: 'default',
+    skill_path: SKILLS_BASE + '/frontend_design.md',
   },
   {
     id: 'skill-last30days',
@@ -166,6 +200,8 @@ const capabilities = [
     description: 'Social media research tool for trends in Reddit, X, and web from the last 30 days.',
     provider: 'custom',
     is_shared: 0,
+    workspace_id: 'default',
+    skill_path: SKILLS_BASE + '/last30days.md',
   },
   {
     id: 'skill-skill-creator',
@@ -174,6 +210,8 @@ const capabilities = [
     description: 'Guide for creating effective skills. Extends Claude capabilities with specialized knowledge.',
     provider: 'custom',
     is_shared: 1,
+    workspace_id: null,
+    skill_path: SKILLS_BASE + '/skill_creator.md',
   },
   {
     id: 'skill-krea-ai',
@@ -182,6 +220,8 @@ const capabilities = [
     description: 'AI image/video generation via Krea.ai. Flux, ChatGPT Image, Ideogram, LoRA, video.',
     provider: 'krea.ai',
     is_shared: 0,
+    workspace_id: 'default',
+    skill_path: SKILLS_BASE + '/krea_ai.md',
   },
   {
     id: 'skill-superdesign',
@@ -190,6 +230,8 @@ const capabilities = [
     description: 'SuperDesigner CLI for quick design assets: backgrounds, patterns, 3D shapes, OG images.',
     provider: 'superdesign',
     is_shared: 0,
+    workspace_id: 'default',
+    skill_path: SKILLS_BASE + '/superdesign.md',
   },
 
   // === VPS-INSTALLED SKILLS (from SKILLS-INSTALLED.md) ===
@@ -200,6 +242,8 @@ const capabilities = [
     description: 'TDD implementation plans with bite-sized tasks. Each task: write failing test, verify, implement, verify, commit.',
     provider: 'obra/superpowers',
     is_shared: 1,
+    workspace_id: null,
+    skill_path: SKILLS_BASE + '/writing_plans.md',
   },
   {
     id: 'skill-systematic-debugging',
@@ -208,6 +252,8 @@ const capabilities = [
     description: 'Systematic debugging: root cause tracing, condition-based waiting, defense-in-depth, test pollution finder.',
     provider: 'obra/superpowers',
     is_shared: 1,
+    workspace_id: null,
+    skill_path: SKILLS_BASE + '/systematic_debugging.md',
   },
   {
     id: 'skill-test-driven-development',
@@ -216,6 +262,8 @@ const capabilities = [
     description: 'Strict TDD workflow enforcement: Red-Green-Refactor. No production code without failing test.',
     provider: 'obra/superpowers',
     is_shared: 1,
+    workspace_id: null,
+    skill_path: SKILLS_BASE + '/test_driven_development.md',
   },
   {
     id: 'skill-supabase-postgres',
@@ -224,6 +272,8 @@ const capabilities = [
     description: 'Supabase Postgres: query performance, connection management, schema design, RLS, monitoring.',
     provider: 'supabase/agent-skills',
     is_shared: 1,
+    workspace_id: null,
+    skill_path: SKILLS_BASE + '/supabase_postgres_best_practices.md',
   },
   {
     id: 'skill-cloudflare',
@@ -232,6 +282,8 @@ const capabilities = [
     description: 'Cloudflare platform: Workers, Pages, KV, D1, R2, AI.',
     provider: 'cloudflare/skills',
     is_shared: 1,
+    workspace_id: null,
+    skill_path: SKILLS_BASE + '/cloudflare.md',
   },
   {
     id: 'skill-ai-agents-architect',
@@ -240,6 +292,8 @@ const capabilities = [
     description: 'AI agent architecture: ReAct loops, tool use, memory systems, multi-agent orchestration.',
     provider: 'sickn33/antigravity-awesome-skills',
     is_shared: 1,
+    workspace_id: null,
+    skill_path: SKILLS_BASE + '/ai_agents_architect.md',
   },
   {
     id: 'skill-security-auditor',
@@ -248,6 +302,8 @@ const capabilities = [
     description: 'Security vulnerability scanner: dependency scanning, secret detection, OWASP Top 10 SAST.',
     provider: 'erichowens/some_claude_skills',
     is_shared: 1,
+    workspace_id: null,
+    skill_path: SKILLS_BASE + '/security_auditor.md',
   },
   {
     id: 'skill-github-actions-expert',
@@ -256,6 +312,8 @@ const capabilities = [
     description: 'GitHub Actions CI/CD: workflow YAML, matrix builds, caching, OIDC security.',
     provider: 'cin12211/orca-q',
     is_shared: 1,
+    workspace_id: null,
+    skill_path: SKILLS_BASE + '/github_actions_expert.md',
   },
   {
     id: 'skill-copywriting',
@@ -264,6 +322,8 @@ const capabilities = [
     description: 'Copywriting frameworks: AIDA, PAS, BAB, 4Ps. Headlines, CTAs, email sequences.',
     provider: 'coreyhaines31/marketingskills',
     is_shared: 0,
+    workspace_id: 'default',
+    skill_path: SKILLS_BASE + '/copywriting.md',
   },
   {
     id: 'skill-content-strategy',
@@ -272,6 +332,8 @@ const capabilities = [
     description: 'Content planning, editorial calendars, content pillars.',
     provider: 'coreyhaines31/marketingskills',
     is_shared: 0,
+    workspace_id: 'default',
+    skill_path: SKILLS_BASE + '/content_strategy.md',
   },
   {
     id: 'skill-product-marketing-context',
@@ -280,6 +342,8 @@ const capabilities = [
     description: 'Positioning, messaging, value props, competitive positioning.',
     provider: 'coreyhaines31/marketingskills',
     is_shared: 0,
+    workspace_id: 'default',
+    skill_path: SKILLS_BASE + '/product_marketing_context.md',
   },
   {
     id: 'skill-seo-audit',
@@ -288,6 +352,8 @@ const capabilities = [
     description: 'Full SEO audit checklists: technical SEO, on-page, off-page.',
     provider: 'coreyhaines31/marketingskills',
     is_shared: 0,
+    workspace_id: 'default',
+    skill_path: SKILLS_BASE + '/seo_audit.md',
   },
   {
     id: 'skill-programmatic-seo',
@@ -296,6 +362,8 @@ const capabilities = [
     description: 'Scalable/programmatic SEO: templates, automation, data-driven pages.',
     provider: 'coreyhaines31/marketingskills',
     is_shared: 0,
+    workspace_id: 'default',
+    skill_path: SKILLS_BASE + '/programmatic_seo.md',
   },
   {
     id: 'skill-marketing-psychology',
@@ -304,6 +372,8 @@ const capabilities = [
     description: '70+ mental models for marketing: cognitive biases, persuasion, decision-making.',
     provider: 'skills.sh',
     is_shared: 0,
+    workspace_id: 'default',
+    skill_path: SKILLS_BASE + '/marketing_psychology.md',
   },
   {
     id: 'skill-remotion-best-practices',
@@ -312,6 +382,8 @@ const capabilities = [
     description: 'React video framework: compositions, animations, audio, subtitles, templates.',
     provider: 'remotion (official)',
     is_shared: 0,
+    workspace_id: 'default',
+    skill_path: SKILLS_BASE + '/remotion_best_practices.md',
   },
   {
     id: 'skill-radio-producer',
@@ -320,6 +392,8 @@ const capabilities = [
     description: 'Radio interview briefing generator.',
     provider: 'custom',
     is_shared: 0,
+    workspace_id: 'default',
+    skill_path: SKILLS_BASE + '/radio_producer.md',
   },
   {
     id: 'skill-cua-desktop',
@@ -328,6 +402,8 @@ const capabilities = [
     description: 'CUA cloud sandbox runner. Ephemeral Linux/Windows desktop VMs for automation.',
     provider: 'cua.ai',
     is_shared: 0,
+    workspace_id: 'default',
+    skill_path: SKILLS_BASE + '/cua_desktop.md',
   },
 
   // === CLI TOOLS ===
@@ -338,6 +414,7 @@ const capabilities = [
     description: 'Secret management CLI. Read credentials from Openclaw vault.',
     provider: '1password',
     is_shared: 1,
+    workspace_id: null,
   },
   {
     id: 'cli-gog',
@@ -346,6 +423,7 @@ const capabilities = [
     description: 'Google Workspace CLI: Gmail, Calendar, Drive, Sheets, Contacts, Tasks.',
     provider: 'gogcli',
     is_shared: 0,
+    workspace_id: 'default',
   },
   {
     id: 'cli-firecrawl',
@@ -354,6 +432,7 @@ const capabilities = [
     description: 'Web scraping, search, and deep research CLI.',
     provider: 'firecrawl',
     is_shared: 1,
+    workspace_id: null,
   },
   {
     id: 'cli-browser-use',
@@ -362,6 +441,7 @@ const capabilities = [
     description: 'Browser automation CLI. Local headless, real Chrome, or cloud remote modes.',
     provider: 'browser-use',
     is_shared: 1,
+    workspace_id: null,
   },
   {
     id: 'cli-summarize',
@@ -370,6 +450,7 @@ const capabilities = [
     description: 'Summarize URLs, YouTube videos, podcasts, PDFs using LLM providers.',
     provider: '@steipete/summarize',
     is_shared: 1,
+    workspace_id: null,
   },
   {
     id: 'cli-uv',
@@ -378,6 +459,7 @@ const capabilities = [
     description: 'Fast Python package manager and virtual environment tool.',
     provider: 'astral',
     is_shared: 1,
+    workspace_id: null,
   },
   {
     id: 'cli-yt-dlp',
@@ -386,6 +468,7 @@ const capabilities = [
     description: 'YouTube audio/video downloader. Used with residential proxy.',
     provider: 'yt-dlp',
     is_shared: 0,
+    workspace_id: 'default',
   },
   {
     id: 'cli-wrangler',
@@ -394,6 +477,7 @@ const capabilities = [
     description: 'Cloudflare Workers deployment and management CLI.',
     provider: 'cloudflare',
     is_shared: 0,
+    workspace_id: 'default',
   },
   {
     id: 'cli-claude',
@@ -402,6 +486,7 @@ const capabilities = [
     description: 'Claude Code for headless coding sessions inside container.',
     provider: 'anthropic',
     is_shared: 0,
+    workspace_id: 'default',
   },
   {
     id: 'cli-cursor-agent',
@@ -410,6 +495,7 @@ const capabilities = [
     description: 'Cursor CLI agent for coding tasks via tmux.',
     provider: 'cursor',
     is_shared: 0,
+    workspace_id: 'default',
   },
   {
     id: 'cli-codex',
@@ -418,6 +504,7 @@ const capabilities = [
     description: 'OpenAI Codex CLI for GPT-powered coding tasks.',
     provider: 'openai',
     is_shared: 0,
+    workspace_id: 'default',
   },
   {
     id: 'cli-ralph-tui',
@@ -426,6 +513,7 @@ const capabilities = [
     description: 'Multi-task PRD-driven coding orchestrator.',
     provider: 'ralf',
     is_shared: 0,
+    workspace_id: 'default',
   },
   {
     id: 'cli-superdesign',
@@ -434,6 +522,7 @@ const capabilities = [
     description: 'Quick design assets: backgrounds, patterns, 3D shapes, OG images.',
     provider: 'superdesign',
     is_shared: 0,
+    workspace_id: 'default',
   },
 
   // === BROWSER AUTOMATION ===
@@ -444,6 +533,7 @@ const capabilities = [
     description: 'Cloud browser with persistent profiles, anti-detection, residential proxies. Primary for DDoS-Guard sites.',
     provider: 'browser-use',
     is_shared: 1,
+    workspace_id: null,
   },
   {
     id: 'browser-openclaw-headless',
@@ -452,6 +542,7 @@ const capabilities = [
     description: 'Headless Chrome (chrome-headless-shell) with 1440x900 viewport. Default for general browsing.',
     provider: 'openclaw',
     is_shared: 1,
+    workspace_id: null,
   },
   {
     id: 'browser-openclaw-chrome',
@@ -460,6 +551,7 @@ const capabilities = [
     description: 'Chrome extension relay to users real Brave/Chrome browser. For authenticated sites.',
     provider: 'openclaw',
     is_shared: 1,
+    workspace_id: null,
   },
   {
     id: 'browser-browserstack',
@@ -468,6 +560,7 @@ const capabilities = [
     description: 'Cross-browser/device testing. 3500+ real browsers/devices. Screenshots, video, Percy visual regression.',
     provider: 'browserstack',
     is_shared: 0,
+    workspace_id: 'default',
   },
   {
     id: 'browser-cua-desktop',
@@ -476,6 +569,7 @@ const capabilities = [
     description: 'Cloud desktop VMs (Linux/Windows) for computer use automation. 1000 credits available.',
     provider: 'cua.ai',
     is_shared: 0,
+    workspace_id: 'default',
   },
 
   // === MCP SERVERS ===
@@ -486,6 +580,7 @@ const capabilities = [
     description: 'Structured AI-powered search with cited sources via Smithery HTTP proxy.',
     provider: 'perplexity',
     is_shared: 1,
+    workspace_id: null,
   },
   {
     id: 'mcp-notion',
@@ -494,6 +589,7 @@ const capabilities = [
     description: 'Notion workspace integration via Smithery HTTP proxy. Create/read/update pages.',
     provider: 'notion',
     is_shared: 1,
+    workspace_id: null,
   },
   {
     id: 'mcp-context7',
@@ -502,6 +598,7 @@ const capabilities = [
     description: 'Library documentation lookups. Free tier, no auth needed.',
     provider: 'context7',
     is_shared: 1,
+    workspace_id: null,
   },
 
   // === WORKFLOW (lobster scripts) ===
@@ -512,6 +609,7 @@ const capabilities = [
     description: 'Daily reinstall of ephemeral CLI tools (summarize, yt-dlp, deno, browser-use, etc.).',
     provider: 'lobster/cron',
     is_shared: 1,
+    workspace_id: null,
   },
   {
     id: 'workflow-health-checks',
@@ -520,6 +618,7 @@ const capabilities = [
     description: 'System health checks for container, sessions, tools, and services.',
     provider: 'lobster/cron',
     is_shared: 1,
+    workspace_id: null,
   },
   {
     id: 'workflow-email-check',
@@ -528,6 +627,7 @@ const capabilities = [
     description: 'Periodic check of pho@agentmail.to inbox for new messages.',
     provider: 'lobster/cron',
     is_shared: 1,
+    workspace_id: null,
   },
   {
     id: 'workflow-scan-daily-intel',
@@ -536,6 +636,7 @@ const capabilities = [
     description: 'Scan daily intelligence reports across agent workspaces.',
     provider: 'lobster/cron',
     is_shared: 1,
+    workspace_id: null,
   },
   {
     id: 'workflow-argus-proactive',
@@ -544,6 +645,7 @@ const capabilities = [
     description: 'Proactive Argus maintenance: stale initiatives, escalation watching.',
     provider: 'lobster/cron',
     is_shared: 1,
+    workspace_id: null,
   },
   {
     id: 'workflow-system-consultor',
@@ -552,6 +654,7 @@ const capabilities = [
     description: 'External diagnostic agent run. Launches Codex/Gemini/Claude for system repair.',
     provider: 'lobster/manual',
     is_shared: 1,
+    workspace_id: null,
   },
   {
     id: 'workflow-post-container-bootstrap',
@@ -560,16 +663,7 @@ const capabilities = [
     description: 'Container bootstrap after restart: restore symlinks, configs, tools.',
     provider: 'lobster/startup',
     is_shared: 1,
-  },
-
-  // === CREDENTIAL PROVIDERS ===
-  {
-    id: 'credential-1password',
-    name: '1Password Vault',
-    category: 'credential_provider',
-    description: 'Openclaw vault with all service credentials. CLI at /home/node/.openclaw/bin/op.',
-    provider: '1password',
-    is_shared: 1,
+    workspace_id: null,
   },
 ];
 
@@ -585,7 +679,7 @@ const agentCapabilities = [
     'skill-browser-use', 'skill-agent-browser', 'skill-krea-ai', 'skill-superdesign',
     'cli-op', 'cli-gog', 'cli-firecrawl', 'cli-summarize', 'cli-claude',
     'browser-use-cloud', 'browser-openclaw-headless', 'browser-openclaw-chrome',
-    'mcp-perplexity', 'mcp-notion', 'credential-1password',
+    'mcp-perplexity', 'mcp-notion',
   ]},
 
   // Apollo (Marketing)
@@ -646,7 +740,6 @@ const agentCapabilities = [
     'skill-browser-use', 'skill-agent-browser',
     'cli-op', 'cli-gog', 'cli-wrangler', 'cli-summarize',
     'browser-use-cloud', 'browser-openclaw-headless',
-    'credential-1password',
     'workflow-daily-libs-update', 'workflow-health-checks',
     'workflow-argus-proactive', 'workflow-post-container-bootstrap',
   ]},
@@ -656,7 +749,6 @@ const agentCapabilities = [
     'skill-browser-use', 'skill-agent-browser',
     'cli-op', 'cli-gog', 'cli-firecrawl', 'cli-summarize',
     'browser-use-cloud', 'browser-openclaw-headless',
-    'credential-1password',
   ]},
 
   // Themis (Code Review)
@@ -927,11 +1019,13 @@ function main() {
       INSERT INTO capabilities (
         id, name, category, description, provider, version,
         install_path, config_ref, is_shared, status, metadata,
+        skill_path, workspace_id,
         created_at, updated_at
       )
       VALUES (
         @id, @name, @category, @description, @provider, @version,
         @install_path, @config_ref, @is_shared, @status, @metadata,
+        @skill_path, @workspace_id,
         @created_at, @updated_at
       )
       ON CONFLICT(id) DO UPDATE SET
@@ -942,6 +1036,8 @@ function main() {
         version      = excluded.version,
         is_shared    = excluded.is_shared,
         metadata     = excluded.metadata,
+        skill_path   = excluded.skill_path,
+        workspace_id = excluded.workspace_id,
         updated_at   = excluded.updated_at
     `);
 
@@ -961,6 +1057,8 @@ function main() {
           is_shared: cap.is_shared !== undefined ? cap.is_shared : 1,
           status: 'unknown',
           metadata: cap.metadata ? JSON.stringify(cap.metadata) : null,
+          skill_path: cap.skill_path || null,
+          workspace_id: cap.workspace_id !== undefined ? cap.workspace_id : null,
           created_at: now(),
           updated_at: now(),
         });

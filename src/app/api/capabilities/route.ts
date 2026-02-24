@@ -11,6 +11,7 @@ export async function GET(request: NextRequest) {
     const category = request.nextUrl.searchParams.get('category');
     const status = request.nextUrl.searchParams.get('status');
     const agentId = request.nextUrl.searchParams.get('agent_id');
+    const workspaceId = request.nextUrl.searchParams.get('workspace_id');
 
     const conditions: string[] = [];
     const params: unknown[] = [];
@@ -22,6 +23,10 @@ export async function GET(request: NextRequest) {
     if (status) {
       conditions.push('c.status = ?');
       params.push(status);
+    }
+    if (workspaceId) {
+      conditions.push('(c.workspace_id IS NULL OR c.workspace_id = ?)');
+      params.push(workspaceId);
     }
 
     let sql: string;
@@ -70,8 +75,8 @@ export async function POST(request: NextRequest) {
     const now = new Date().toISOString();
 
     run(
-      `INSERT INTO capabilities (id, name, category, description, provider, version, install_path, config_ref, is_shared, status, metadata, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO capabilities (id, name, category, description, provider, version, install_path, config_ref, is_shared, status, metadata, skill_path, workspace_id, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id,
         data.name,
@@ -84,6 +89,8 @@ export async function POST(request: NextRequest) {
         data.is_shared !== undefined ? (data.is_shared ? 1 : 0) : 1,
         data.status || 'unknown',
         data.metadata || null,
+        data.skill_path || null,
+        data.workspace_id || null,
         now,
         now,
       ]

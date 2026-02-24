@@ -323,6 +323,8 @@ export interface Capability {
   last_health_check?: string;
   health_message?: string;
   metadata?: string;
+  skill_path?: string;
+  workspace_id?: string;
   created_at: string;
   updated_at: string;
 }
@@ -344,7 +346,8 @@ export type IntegrationType =
   | 'cli_auth'
   | 'browser_profile'
   | 'cron_job'
-  | 'webhook';
+  | 'webhook'
+  | 'credential_provider';
 
 export type IntegrationStatus = 'connected' | 'expired' | 'broken' | 'unconfigured' | 'unknown';
 

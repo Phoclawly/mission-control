@@ -407,6 +407,49 @@ const migrations: Migration[] = [
       `);
       console.log('[Migration 012] integrations table updated with credential_provider type');
     }
+  },
+  {
+    id: '013',
+    name: 'workspace_scoping',
+    up: (db) => {
+      console.log('[Migration 013] Adding workspace_id to capabilities and integrations...');
+
+      const capsInfo = db.prepare("PRAGMA table_info(capabilities)").all() as { name: string }[];
+      if (!capsInfo.some(col => col.name === 'workspace_id')) {
+        db.exec(`ALTER TABLE capabilities ADD COLUMN workspace_id TEXT REFERENCES workspaces(id)`);
+        db.exec(`UPDATE capabilities SET workspace_id = 'default' WHERE is_shared = 0`);
+        db.exec(`CREATE INDEX IF NOT EXISTS idx_capabilities_workspace ON capabilities(workspace_id)`);
+        console.log('[Migration 013] Added workspace_id to capabilities');
+      }
+
+      const intsInfo = db.prepare("PRAGMA table_info(integrations)").all() as { name: string }[];
+      if (!intsInfo.some(col => col.name === 'workspace_id')) {
+        db.exec(`ALTER TABLE integrations ADD COLUMN workspace_id TEXT REFERENCES workspaces(id)`);
+        db.exec(`CREATE INDEX IF NOT EXISTS idx_integrations_workspace ON integrations(workspace_id)`);
+        console.log('[Migration 013] Added workspace_id to integrations');
+      }
+    }
+  },
+  {
+    id: '014',
+    name: 'add_skill_path',
+    up: (db) => {
+      console.log('[Migration 014] Adding skill_path to capabilities...');
+      const capsInfo = db.prepare("PRAGMA table_info(capabilities)").all() as { name: string }[];
+      if (!capsInfo.some(col => col.name === 'skill_path')) {
+        db.exec(`ALTER TABLE capabilities ADD COLUMN skill_path TEXT`);
+        console.log('[Migration 014] Added skill_path to capabilities');
+      }
+    }
+  },
+  {
+    id: '015',
+    name: 'delete_duplicate_1password_capability',
+    up: (db) => {
+      console.log('[Migration 015] Deleting duplicate credential-1password capability...');
+      db.exec(`DELETE FROM capabilities WHERE id = 'credential-1password'`);
+      console.log('[Migration 015] Deleted credential-1password capability');
+    }
   }
 ];
 

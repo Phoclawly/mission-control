@@ -84,7 +84,7 @@ const CapabilityStatus = z.enum(['healthy', 'degraded', 'broken', 'unknown', 'di
 
 const IntegrationType = z.enum([
   'mcp_plugin', 'oauth_token', 'api_key', 'cli_auth',
-  'browser_profile', 'cron_job', 'webhook'
+  'browser_profile', 'cron_job', 'webhook', 'credential_provider'
 ]);
 
 const IntegrationStatus = z.enum(['connected', 'expired', 'broken', 'unconfigured', 'unknown']);
@@ -103,6 +103,8 @@ export const CreateCapabilitySchema = z.object({
   is_shared: z.boolean().optional(),
   status: CapabilityStatus.optional(),
   metadata: z.string().optional(),
+  skill_path: z.string().max(1000).optional(),
+  workspace_id: z.string().max(200).optional(),
 });
 
 export const UpdateCapabilitySchema = z.object({

@@ -1,0 +1,271 @@
+# daily-libs-update.lobster.yaml
+# Daily restoration pipeline for libraries, tools, and symlinks
+name: daily-libs-update
+version: "1.0"
+description: Daily pipeline to restore and verify npm globals, deno, skill symlinks, and run installation verification tests
+
+trigger:
+  type: cron
+  schedule: "0 7 * * *"
+
+env:
+  SKILLS_DIR: ${SKILLS_DIR:-/opt/skills}
+  SYMLINKS_DIR: ${SYMLINKS_DIR:-/usr/local/bin}
+  REPORT_DIR: ${REPORT_DIR:-/var/log/daily-libs}
+  NPM_GLOBALS_LIST: ${NPM_GLOBALS_LIST:-/opt/config/npm-globals.txt}
+  IVT_SCRIPT: ${IVT_SCRIPT:-/opt/scripts/ivt-check.sh}
+
+steps:
+  - id: npm-globals
+    name: Reinstall and verify npm global packages
+    action: shell
+    command: |
+      # Verify npm is available
+      if ! command -v npm >/dev/null 2>&1; then
+        echo '{"status": "error", "message": "npm not found"}'
+        exit 1
+      fi
+
+      results='[]'
+      npm_version=$(npm --version 2>/dev/null)
+
+      # Read expected globals from config, or use a default set
+      if [ -f "${NPM_GLOBALS_LIST}" ]; then
+        globals=$(cat "${NPM_GLOBALS_LIST}")
+      else
+        globals="typescript ts-node nodemon pm2"
+      fi
+
+      for pkg in $globals; do
+        # Check if already installed
+        if npm list -g "$pkg" --depth=0 >/dev/null 2>&1; then
+          results=$(echo "$results" | jq --arg p "$pkg" '. + [{"package": $p, "status": "present"}]')
+        else
+          # Attempt install
+          if npm install -g "$pkg" >/dev/null 2>&1; then
+            results=$(echo "$results" | jq --arg p "$pkg" '. + [{"package": $p, "status": "installed"}]')
+          else
+            results=$(echo "$results" | jq --arg p "$pkg" '. + [{"package": $p, "status": "failed"}]')
+          fi
+        fi
+      done
+
+      echo "{\"npm_version\": \"$npm_version\", \"packages\": $results}"
+    validation:
+      - check: exit_code
+        expect: 0
+    on_failure:
+      action: notify
+      notification:
+        type: log
+        message: "npm globals restoration had failures"
+    outputs:
+      npm_result: ${stdout}
+
+  - id: deno-check
+    name: Verify deno installation and update if needed
+    action: shell
+    command: |
+      # Check deno installation
+      if ! command -v deno >/dev/null 2>&1; then
+        echo '{"deno_installed": false, "action": "installing"}'
+        # Attempt to install deno
+        curl -fsSL https://deno.land/install.sh | sh 2>/dev/null
+        if command -v deno >/dev/null 2>&1; then
+          version=$(deno --version 2>/dev/null | head -1)
+          echo "{\"deno_installed\": true, \"action\": \"installed\", \"version\": \"$version\"}"
+        else
+          echo '{"deno_installed": false, "action": "install_failed"}'
+          exit 1
+        fi
+      else
+        current=$(deno --version 2>/dev/null | head -1)
+        # Attempt upgrade
+        deno upgrade 2>/dev/null || true
+        updated=$(deno --version 2>/dev/null | head -1)
+        echo "{\"deno_installed\": true, \"previous\": \"$current\", \"current\": \"$updated\"}"
+      fi
+    validation:
+      - check: exit_code
+        expect: 0
+    on_failure:
+      action: notify
+      notification:
+        type: log
+        message: "Deno check/update failed"
+    outputs:
+      deno_result: ${stdout}
+
+  - id: skill-symlinks
+    name: Verify and recreate skill symlinks
+    depends_on: [npm-globals, deno-check]
+    action: shell
+    command: |
+      # Verify and restore skill symlinks
+      if [ ! -d "${SKILLS_DIR}" ]; then
+        echo '{"status": "skipped", "message": "Skills directory not found: '"${SKILLS_DIR}"'"}'
+        exit 0
+      fi
+
+      results='[]'
+      for skill_dir in "${SKILLS_DIR}"/*/; do
+        [ -d "$skill_dir" ] || continue
+        skill_name=$(basename "$skill_dir")
+        bin_file="${skill_dir}bin/${skill_name}"
+        link_path="${SYMLINKS_DIR}/${skill_name}"
+
+        if [ ! -f "$bin_file" ] && [ ! -f "${skill_dir}index.js" ]; then
+          results=$(echo "$results" | jq --arg s "$skill_name" '. + [{"skill": $s, "status": "no_binary"}]')
+          continue
+        fi
+
+        target="$bin_file"
+        [ -f "$target" ] || target="${skill_dir}index.js"
+
+        if [ -L "$link_path" ]; then
+          current_target=$(readlink "$link_path" 2>/dev/null)
+          if [ "$current_target" = "$target" ]; then
+            results=$(echo "$results" | jq --arg s "$skill_name" '. + [{"skill": $s, "status": "ok"}]')
+          else
+            ln -sf "$target" "$link_path"
+            results=$(echo "$results" | jq --arg s "$skill_name" '. + [{"skill": $s, "status": "relinked"}]')
+          fi
+        else
+          ln -sf "$target" "$link_path" 2>/dev/null && {
+            results=$(echo "$results" | jq --arg s "$skill_name" '. + [{"skill": $s, "status": "created"}]')
+          } || {
+            results=$(echo "$results" | jq --arg s "$skill_name" '. + [{"skill": $s, "status": "failed"}]')
+          }
+        fi
+      done
+
+      echo "{\"symlinks\": $results}"
+    validation:
+      - check: exit_code
+        expect: 0
+    on_failure:
+      action: notify
+      notification:
+        type: log
+        message: "Skill symlink restoration had issues"
+    outputs:
+      symlink_result: ${stdout}
+
+  - id: ivt-check
+    name: Run installation verification tests
+    depends_on: [skill-symlinks]
+    action: shell
+    command: |
+      # Run IVT checks
+      ivt_results='{"tests": []}'
+
+      # Test 1: Node.js available
+      if command -v node >/dev/null 2>&1; then
+        node_ver=$(node --version 2>/dev/null)
+        ivt_results=$(echo "$ivt_results" | jq --arg v "$node_ver" '.tests += [{"name": "node", "status": "pass", "version": $v}]')
+      else
+        ivt_results=$(echo "$ivt_results" | jq '.tests += [{"name": "node", "status": "fail"}]')
+      fi
+
+      # Test 2: npm available
+      if command -v npm >/dev/null 2>&1; then
+        npm_ver=$(npm --version 2>/dev/null)
+        ivt_results=$(echo "$ivt_results" | jq --arg v "$npm_ver" '.tests += [{"name": "npm", "status": "pass", "version": $v}]')
+      else
+        ivt_results=$(echo "$ivt_results" | jq '.tests += [{"name": "npm", "status": "fail"}]')
+      fi
+
+      # Test 3: deno available
+      if command -v deno >/dev/null 2>&1; then
+        deno_ver=$(deno --version 2>/dev/null | head -1)
+        ivt_results=$(echo "$ivt_results" | jq --arg v "$deno_ver" '.tests += [{"name": "deno", "status": "pass", "version": $v}]')
+      else
+        ivt_results=$(echo "$ivt_results" | jq '.tests += [{"name": "deno", "status": "fail"}]')
+      fi
+
+      # Test 4: jq available
+      if command -v jq >/dev/null 2>&1; then
+        jq_ver=$(jq --version 2>/dev/null)
+        ivt_results=$(echo "$ivt_results" | jq --arg v "$jq_ver" '.tests += [{"name": "jq", "status": "pass", "version": $v}]')
+      else
+        ivt_results=$(echo "$ivt_results" | jq '.tests += [{"name": "jq", "status": "fail"}]')
+      fi
+
+      # Test 5: curl available
+      if command -v curl >/dev/null 2>&1; then
+        ivt_results=$(echo "$ivt_results" | jq '.tests += [{"name": "curl", "status": "pass"}]')
+      else
+        ivt_results=$(echo "$ivt_results" | jq '.tests += [{"name": "curl", "status": "fail"}]')
+      fi
+
+      # Run custom IVT script if it exists
+      if [ -x "${IVT_SCRIPT}" ]; then
+        custom_result=$("${IVT_SCRIPT}" 2>&1) && {
+          ivt_results=$(echo "$ivt_results" | jq '.tests += [{"name": "custom_ivt", "status": "pass"}]')
+        } || {
+          ivt_results=$(echo "$ivt_results" | jq --arg d "$custom_result" '.tests += [{"name": "custom_ivt", "status": "fail", "details": $d}]')
+        }
+      fi
+
+      # Calculate summary
+      total=$(echo "$ivt_results" | jq '.tests | length')
+      passed=$(echo "$ivt_results" | jq '[.tests[] | select(.status == "pass")] | length')
+      failed=$(echo "$ivt_results" | jq '[.tests[] | select(.status == "fail")] | length')
+      ivt_results=$(echo "$ivt_results" | jq --argjson t "$total" --argjson p "$passed" --argjson f "$failed" \
+        '. + {"total": $t, "passed": $p, "failed": $f}')
+
+      echo "$ivt_results"
+    validation:
+      - check: exit_code
+        expect: 0
+    on_failure:
+      action: notify
+      notification:
+        type: log
+        message: "IVT checks had failures"
+    outputs:
+      ivt_result: ${stdout}
+
+  - id: report
+    name: Generate summary report
+    depends_on: [npm-globals, deno-check, skill-symlinks, ivt-check]
+    action: shell
+    command: |
+      # Generate daily libs update summary report
+      timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+      mkdir -p "${REPORT_DIR}"
+
+      report=$(jq -n \
+        --arg ts "$timestamp" \
+        --argjson npm '${steps.npm-globals.outputs.npm_result}' \
+        --argjson deno '${steps.deno-check.outputs.deno_result}' \
+        --argjson symlinks '${steps.skill-symlinks.outputs.symlink_result}' \
+        --argjson ivt '${steps.ivt-check.outputs.ivt_result}' \
+        '{
+          timestamp: $ts,
+          npm: $npm,
+          deno: $deno,
+          symlinks: $symlinks,
+          ivt: $ivt,
+          overall: (if ($ivt.failed // 0) == 0 then "healthy" else "degraded" end)
+        }')
+
+      report_file="${REPORT_DIR}/daily-libs-$(date +%Y%m%d).json"
+      echo "$report" > "$report_file"
+      echo "$report"
+    validation:
+      - check: exit_code
+        expect: 0
+    on_failure:
+      action: notify
+      notification:
+        type: log
+        message: "Failed to generate daily libs report"
+    outputs:
+      report: ${stdout}
+
+error_handling:
+  default_action: notify
+  notification:
+    type: log
+    message: "Daily libs update workflow failed at step ${failed_step}: ${error_message}"

@@ -4,7 +4,7 @@
  *
  * Reads:
  *   - $WORKSPACE_BASE_PATH/memory/ (main workspace memory)
- *   - $WORKSPACE_BASE_PATH/../workspace-*/memory/ (per-agent memory)
+ *   - $WORKSPACE_BASE_PATH/../workspace-{name}/memory/ (per-agent memory)
  *
  * Writes to:
  *   - agent_memory_index table

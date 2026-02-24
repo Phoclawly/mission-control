@@ -577,7 +577,7 @@ const capabilities = [
 
 const agentCapabilities = [
   // Pho (Commander) — has everything
-  { agent_id: 'pho', capabilities: [
+  { agent_id: 'main', capabilities: [
     'skill-coding-router', 'skill-code-supervisor', 'skill-cursor-supervisor',
     'skill-codex-supervisor', 'skill-ralph-supervisor', 'skill-oz-supervisor',
     'skill-email-router', 'skill-agentmail', 'skill-meetings-organizer-v2',

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { X, Save, Plus } from 'lucide-react';
+import { X, Save, Plus, Zap } from 'lucide-react';
 import { useMissionControl } from '@/lib/store';
 import type { InitiativeStatus } from '@/lib/types';
 interface InitiativeModalProps {
@@ -15,6 +15,7 @@ export function InitiativeModal({ onClose, workspaceId }: InitiativeModalProps) 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [quickTasksText, setQuickTasksText] = useState('');
   const [quickTasksCreated, setQuickTasksCreated] = useState(0);
+  const [activateSquad, setActivateSquad] = useState(false);
   const [form, setForm] = useState({
     title: '',
     summary: '',
@@ -87,6 +88,24 @@ export function InitiativeModal({ onClose, workspaceId }: InitiativeModalProps) 
           } catch { /* continue with remaining tasks */ }
         }
         setQuickTasksCreated(created);
+      }
+
+      // Activate squad: dispatch to master agent via workspace activation
+      if (activateSquad) {
+        try {
+          await fetch('/api/workspaces/activate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              workspace: workspaceId || 'default',
+              initiative_id: id,
+              agent_id: form.lead || undefined,
+              source: 'mission-control',
+            }),
+          });
+        } catch {
+          console.error('Squad activation failed');
+        }
       }
 
       onClose();
@@ -165,6 +184,27 @@ export function InitiativeModal({ onClose, workspaceId }: InitiativeModalProps) 
             </select>
           </div>
 
+          {/* Activate Squad Toggle */}
+          <div className="p-3 bg-mc-bg rounded-lg border border-mc-border">
+            <label className="flex items-start gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={activateSquad}
+                onChange={(e) => setActivateSquad(e.target.checked)}
+                className="w-4 h-4 mt-0.5 rounded border-mc-border"
+              />
+              <div>
+                <span className="font-medium text-sm flex items-center gap-2">
+                  <Zap className="w-4 h-4 text-amber-400" />
+                  Activate Squad
+                </span>
+                <p className="text-xs text-mc-text-secondary mt-1">
+                  Immediately dispatch this initiative to {masterAgent ? `${masterAgent.avatar_emoji} ${masterAgent.name}` : 'the lead agent'} for task assignment and supervision. Tasks will move from Inbox to In Progress.
+                </p>
+              </div>
+            </label>
+          </div>
+
           {/* Quick Add Tasks */}
           <div className="border-t border-mc-border pt-4">
             <label className="flex items-center gap-2 text-sm font-medium mb-2">
@@ -201,7 +241,12 @@ export function InitiativeModal({ onClose, workspaceId }: InitiativeModalProps) 
               className="flex items-center gap-2 px-4 py-2 bg-mc-accent text-mc-bg rounded text-sm font-medium hover:bg-mc-accent/90 disabled:opacity-50"
             >
               <Save className="w-4 h-4" />
-              {isSubmitting ? 'Creating...' : quickTaskLines > 0 ? `Create Initiative + ${quickTaskLines} Tasks` : 'Create Initiative'}
+              {isSubmitting
+                ? (activateSquad ? 'Activating...' : 'Creating...')
+                : activateSquad
+                  ? (quickTaskLines > 0 ? `Create + Activate Squad (${quickTaskLines} tasks)` : 'Create + Activate Squad')
+                  : (quickTaskLines > 0 ? `Create Initiative + ${quickTaskLines} Tasks` : 'Create Initiative')
+              }
             </button>
           </div>
         </form>

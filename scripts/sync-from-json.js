@@ -290,6 +290,82 @@ function syncAgents(db) {
   return count;
 }
 
+// ─── Sync initiatives → initiative_cache table ──────────────────────────────
+
+function syncInitiativeCache(db) {
+  const data = readJSON(INITIATIVES_FILE);
+  if (!data || !Array.isArray(data.initiatives)) {
+    console.warn('[sync] INITIATIVES.json missing or malformed (cache)');
+    return 0;
+  }
+
+  // Get the primary workspace_id
+  const workspace = db.prepare('SELECT id FROM workspaces LIMIT 1').get();
+  const workspace_id = workspace ? workspace.id : null;
+
+  const upsert = db.prepare(`
+    INSERT INTO initiative_cache (
+      id, title, status, lead, participants, priority,
+      created, target, summary, source, external_request_id,
+      history, raw_json, workspace_id, synced_at,
+      created_at, updated_at
+    )
+    VALUES (
+      @id, @title, @status, @lead, @participants, @priority,
+      @created, @target, @summary, @source, @external_request_id,
+      @history, @raw_json, @workspace_id, @synced_at,
+      @created_at, @updated_at
+    )
+    ON CONFLICT(id) DO UPDATE SET
+      title               = excluded.title,
+      status              = excluded.status,
+      lead                = excluded.lead,
+      participants        = excluded.participants,
+      priority            = excluded.priority,
+      created             = excluded.created,
+      target              = excluded.target,
+      summary             = excluded.summary,
+      source              = excluded.source,
+      external_request_id = excluded.external_request_id,
+      history             = excluded.history,
+      raw_json            = excluded.raw_json,
+      workspace_id        = excluded.workspace_id,
+      synced_at           = excluded.synced_at,
+      updated_at          = excluded.updated_at
+  `);
+
+  const syncMany = db.transaction((initiatives) => {
+    let count = 0;
+    for (const init of initiatives) {
+      upsert.run({
+        id: init.id,
+        title: init.title,
+        status: init.status,
+        lead: init.lead || null,
+        participants: JSON.stringify(init.participants || []),
+        priority: init.priority || null,
+        created: init.created || null,
+        target: init.target || null,
+        summary: init.summary || null,
+        source: init.source || null,
+        external_request_id: init.external_request_id || null,
+        history: JSON.stringify(init.history || []),
+        raw_json: JSON.stringify(init),
+        workspace_id,
+        synced_at: now(),
+        created_at: init.created || now(),
+        updated_at: now(),
+      });
+      count++;
+    }
+    return count;
+  });
+
+  const count = syncMany(data.initiatives);
+  console.log(`[sync] Initiative cache: ${count} upserted`);
+  return count;
+}
+
 // ─── Log sync event ──────────────────────────────────────────────────────────
 
 function logSyncEvent(db, initiativeCount, agentCount) {
@@ -330,11 +406,12 @@ function main() {
 
   try {
     const initCount = syncInitiatives(db);
+    const cacheCount = syncInitiativeCache(db);
     const agentCount = syncAgents(db);
     logSyncEvent(db, initCount, agentCount);
 
     const elapsed = Date.now() - start;
-    console.log(`[sync] Complete in ${elapsed}ms — initiatives=${initCount} agents=${agentCount}`);
+    console.log(`[sync] Complete in ${elapsed}ms — initiatives=${initCount} cache=${cacheCount} agents=${agentCount}`);
   } catch (e) {
     console.error(`[sync] Fatal error: ${e.message}`);
     process.exit(1);

@@ -29,7 +29,13 @@ export async function GET(
       return NextResponse.json({ error: 'Task not found' }, { status: 404 });
     }
 
-    return NextResponse.json(task);
+    // Fetch subtasks for this task
+    const subtasks = queryAll<Task>(
+      'SELECT * FROM tasks WHERE parent_task_id = ? ORDER BY created_at ASC',
+      [id]
+    );
+
+    return NextResponse.json({ ...task, subtasks });
   } catch (error) {
     console.error('Failed to fetch task:', error);
     return NextResponse.json({ error: 'Failed to fetch task' }, { status: 500 });
@@ -222,6 +228,23 @@ export async function PATCH(
     if (validatedData.task_type_config !== undefined) {
       updates.push('task_type_config = ?');
       values.push(validatedData.task_type_config !== null ? JSON.stringify(validatedData.task_type_config) : null);
+    }
+    if (validatedData.parent_task_id !== undefined) {
+      if (validatedData.parent_task_id !== null) {
+        // Enforce depth limit: new parent must not itself have a parent
+        const newParent = queryOne<Task>('SELECT id, parent_task_id FROM tasks WHERE id = ?', [validatedData.parent_task_id]);
+        if (!newParent) {
+          return NextResponse.json({ error: 'Parent task not found' }, { status: 400 });
+        }
+        if (newParent.parent_task_id) {
+          return NextResponse.json(
+            { error: 'Subtask depth limit exceeded: only one level of nesting allowed' },
+            { status: 400 }
+          );
+        }
+      }
+      updates.push('parent_task_id = ?');
+      values.push(validatedData.parent_task_id);
     }
 
     // Track if we need to dispatch task

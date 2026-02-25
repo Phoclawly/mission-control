@@ -516,6 +516,55 @@ const migrations: Migration[] = [
         console.log('[Migration 017] Added completed_at to tasks');
       }
     }
+  },
+  {
+    id: '018',
+    name: 'add_initiative_cache',
+    up: (db) => {
+      console.log('[Migration 018] Creating initiative_cache table...');
+
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS initiative_cache (
+          id TEXT PRIMARY KEY,
+          title TEXT NOT NULL,
+          status TEXT NOT NULL,
+          lead TEXT,
+          participants TEXT,
+          priority TEXT,
+          created TEXT,
+          target TEXT,
+          summary TEXT,
+          source TEXT,
+          external_request_id TEXT,
+          history TEXT,
+          raw_json TEXT,
+          workspace_id TEXT,
+          synced_at TEXT NOT NULL,
+          created_at TEXT DEFAULT (datetime('now')),
+          updated_at TEXT DEFAULT (datetime('now'))
+        );
+      `);
+
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_initiative_cache_status ON initiative_cache(status)`);
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_initiative_cache_workspace ON initiative_cache(workspace_id)`);
+
+      console.log('[Migration 018] initiative_cache table created');
+    }
+  },
+  {
+    id: '019',
+    name: 'add_parent_task_id',
+    up: (db) => {
+      console.log('[Migration 019] Adding parent_task_id to tasks...');
+
+      const tasksInfo = db.prepare("PRAGMA table_info(tasks)").all() as { name: string }[];
+      if (!tasksInfo.some(col => col.name === 'parent_task_id')) {
+        db.exec(`ALTER TABLE tasks ADD COLUMN parent_task_id TEXT`);
+        console.log('[Migration 019] Added parent_task_id to tasks');
+      }
+
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_tasks_parent ON tasks(parent_task_id)`);
+    }
   }
 ];
 

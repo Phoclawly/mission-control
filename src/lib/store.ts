@@ -2,7 +2,7 @@
 
 import { create } from 'zustand';
 import { debug } from './debug';
-import type { Agent, Task, Conversation, Message, Event, TaskStatus, OpenClawSession, Capability, Integration, CronJob } from './types';
+import type { Agent, Task, Conversation, Message, Event, TaskStatus, OpenClawSession, Capability, Integration, CronJob, Initiative } from './types';
 
 interface MissionControlState {
   // Data
@@ -62,6 +62,12 @@ interface MissionControlState {
   setCronJobs: (crons: CronJob[]) => void;
   updateCapability: (cap: Capability) => void;
   updateIntegration: (integ: Integration) => void;
+
+  // Initiatives
+  initiatives: Initiative[];
+  setInitiatives: (initiatives: Initiative[]) => void;
+  addInitiative: (initiative: Initiative) => void;
+  updateInitiative: (initiative: Initiative) => void;
 }
 
 export const useMissionControl = create<MissionControlState>((set) => ({
@@ -182,6 +188,21 @@ export const useMissionControl = create<MissionControlState>((set) => ({
     set((state) => ({
       integrations: state.integrations.map((i) =>
         i.id === integ.id ? integ : i
+      ),
+    })),
+
+  // Initiatives
+  initiatives: [],
+  setInitiatives: (initiatives) => set({ initiatives }),
+  addInitiative: (initiative) =>
+    set((state) => {
+      if (state.initiatives.some((i) => i.id === initiative.id)) return state;
+      return { initiatives: [initiative, ...state.initiatives] };
+    }),
+  updateInitiative: (initiative) =>
+    set((state) => ({
+      initiatives: state.initiatives.map((i) =>
+        i.id === initiative.id ? initiative : i
       ),
     })),
 }));

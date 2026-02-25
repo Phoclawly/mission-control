@@ -31,6 +31,31 @@ const DeliverableType = z.enum(['file', 'url', 'artifact']);
 // Agent IDs in this project can be UUIDs or stable string IDs (e.g. "ventanal", "main")
 const AgentIdField = z.union([z.string().min(1), z.literal(''), z.null()]);
 
+// ─── Task type config schemas ──────────────────────────────────────────────
+
+const ClaudeTeamConfigSchema = z.object({
+  team_size: z.number().int().min(1).max(10),
+  team_members: z.array(z.object({
+    name: z.string().min(1),
+    focus: z.string(),
+    role: z.string(),
+  })).optional().default([]),
+  model: z.string().optional(),
+});
+
+const MultiHypothesisConfigSchema = z.object({
+  hypotheses: z.array(z.object({
+    label: z.string().min(1),
+    focus_description: z.string(),
+  })).min(1).max(10),
+  coordinator_agent_id: z.string().optional(),
+});
+
+const TASK_TYPE_CONFIG_SCHEMAS: Record<string, z.ZodTypeAny> = {
+  'claude-team': ClaudeTeamConfigSchema,
+  'multi-hypothesis': MultiHypothesisConfigSchema,
+};
+
 // Task validation schemas
 export const CreateTaskSchema = z.object({
   title: z.string().min(1, 'Title is required').max(500, 'Title must be 500 characters or less'),
@@ -48,8 +73,23 @@ export const CreateTaskSchema = z.object({
   // Accept null and convert to undefined
   due_date: z.union([z.string(), z.null()]).optional().transform(v => v === null ? undefined : v),
   task_type: TaskTypeEnum.optional().default('openclaw-native'),
-  // z.any() — config is a free-form JSON blob stored as TEXT; validated shapes are in task-types.ts
   task_type_config: z.any().optional(),
+  parent_task_id: z.string().optional(),
+}).superRefine((data, ctx) => {
+  if (data.task_type_config && data.task_type) {
+    const schema = TASK_TYPE_CONFIG_SCHEMAS[data.task_type];
+    if (schema) {
+      const result = schema.safeParse(data.task_type_config);
+      if (!result.success) {
+        for (const issue of result.error.issues) {
+          ctx.addIssue({
+            ...issue,
+            path: ['task_type_config', ...issue.path],
+          });
+        }
+      }
+    }
+  }
 });
 
 export const UpdateTaskSchema = z.object({
@@ -64,7 +104,23 @@ export const UpdateTaskSchema = z.object({
   source: z.string().min(1).max(64).optional(),
   task_type: TaskTypeEnum.optional(),
   task_type_config: z.any().optional(),
+  parent_task_id: z.union([z.string(), z.null()]).optional(),
   updated_by_agent_id: AgentIdField.optional().transform(v => (v === '' || v === null) ? undefined : v),
+}).superRefine((data, ctx) => {
+  if (data.task_type_config && data.task_type) {
+    const schema = TASK_TYPE_CONFIG_SCHEMAS[data.task_type];
+    if (schema) {
+      const result = schema.safeParse(data.task_type_config);
+      if (!result.success) {
+        for (const issue of result.error.issues) {
+          ctx.addIssue({
+            ...issue,
+            path: ['task_type_config', ...issue.path],
+          });
+        }
+      }
+    }
+  }
 });
 
 // Activity validation schema

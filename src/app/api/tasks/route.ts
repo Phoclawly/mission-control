@@ -15,6 +15,8 @@ export async function GET(request: NextRequest) {
     const businessId = searchParams.get('business_id');
     const workspaceId = searchParams.get('workspace_id');
     const assignedAgentId = searchParams.get('assigned_agent_id');
+    const initiativeId = searchParams.get('initiative_id');
+    const parentTaskId = searchParams.get('parent_task_id');
 
     let sql = `
       SELECT
@@ -51,6 +53,18 @@ export async function GET(request: NextRequest) {
     if (assignedAgentId) {
       sql += ' AND t.assigned_agent_id = ?';
       params.push(assignedAgentId);
+    }
+    if (initiativeId) {
+      sql += ' AND t.initiative_id = ?';
+      params.push(initiativeId);
+    }
+    if (parentTaskId) {
+      if (parentTaskId === 'none') {
+        sql += ' AND t.parent_task_id IS NULL';
+      } else {
+        sql += ' AND t.parent_task_id = ?';
+        params.push(parentTaskId);
+      }
     }
 
     sql += ' ORDER BY t.created_at DESC';
@@ -196,12 +210,26 @@ export async function POST(request: NextRequest) {
     }
     const status = validatedData.status || 'inbox';
 
+    // Validate parent_task_id if provided
+    if (validatedData.parent_task_id) {
+      const parentTask = queryOne<Task>('SELECT id, parent_task_id FROM tasks WHERE id = ?', [validatedData.parent_task_id]);
+      if (!parentTask) {
+        return NextResponse.json({ error: 'Parent task not found' }, { status: 400 });
+      }
+      if (parentTask.parent_task_id) {
+        return NextResponse.json(
+          { error: 'Subtask depth limit exceeded: only one level of nesting allowed' },
+          { status: 400 }
+        );
+      }
+    }
+
     try {
       if (taskMetadataColumnsReady) {
         if (taskTypeColumnsReady) {
           run(
-            `INSERT INTO tasks (id, title, description, status, priority, assigned_agent_id, created_by_agent_id, workspace_id, business_id, due_date, initiative_id, external_request_id, source, task_type, task_type_config, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            `INSERT INTO tasks (id, title, description, status, priority, assigned_agent_id, created_by_agent_id, workspace_id, business_id, due_date, initiative_id, external_request_id, source, task_type, task_type_config, parent_task_id, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
               id,
               validatedData.title,
@@ -218,14 +246,15 @@ export async function POST(request: NextRequest) {
               source,
               validatedData.task_type || 'openclaw-native',
               validatedData.task_type_config ? JSON.stringify(validatedData.task_type_config) : null,
+              validatedData.parent_task_id || null,
               now,
               now,
             ]
           );
         } else {
           run(
-            `INSERT INTO tasks (id, title, description, status, priority, assigned_agent_id, created_by_agent_id, workspace_id, business_id, due_date, initiative_id, external_request_id, source, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            `INSERT INTO tasks (id, title, description, status, priority, assigned_agent_id, created_by_agent_id, workspace_id, business_id, due_date, initiative_id, external_request_id, source, parent_task_id, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
               id,
               validatedData.title,
@@ -240,6 +269,7 @@ export async function POST(request: NextRequest) {
               validatedData.initiative_id || null,
               validatedData.external_request_id || null,
               source,
+              validatedData.parent_task_id || null,
               now,
               now,
             ]
@@ -247,8 +277,8 @@ export async function POST(request: NextRequest) {
         }
       } else {
         run(
-          `INSERT INTO tasks (id, title, description, status, priority, assigned_agent_id, created_by_agent_id, workspace_id, business_id, due_date, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO tasks (id, title, description, status, priority, assigned_agent_id, created_by_agent_id, workspace_id, business_id, due_date, parent_task_id, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             id,
             validatedData.title,
@@ -260,6 +290,7 @@ export async function POST(request: NextRequest) {
             workspaceId,
             validatedData.business_id || 'default',
             validatedData.due_date || null,
+            validatedData.parent_task_id || null,
             now,
             now,
           ]

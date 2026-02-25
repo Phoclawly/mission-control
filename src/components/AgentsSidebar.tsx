@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Plus, ChevronRight, ChevronLeft, Zap, ZapOff, Loader2 } from 'lucide-react';
 import { useMissionControl } from '@/lib/store';
-import type { Agent, AgentStatus, OpenClawSession } from '@/lib/types';
+import type { Agent, AgentStatus, OpenClawSession, Task } from '@/lib/types';
 import { AgentModal } from './AgentModal';
 
 type FilterTab = 'all' | 'working' | 'standby';
@@ -13,7 +13,15 @@ interface AgentsSidebarProps {
 }
 
 export function AgentsSidebar({ workspaceId }: AgentsSidebarProps) {
-  const { agents, selectedAgent, setSelectedAgent, agentOpenClawSessions, setAgentOpenClawSession } = useMissionControl();
+  const { agents, tasks, selectedAgent, setSelectedAgent, agentOpenClawSessions, setAgentOpenClawSession } = useMissionControl();
+
+  // Compute per-agent task info
+  const agentTaskMap = new Map<string, { active: Task | undefined; count: number }>();
+  for (const agent of agents) {
+    const agentTasks = tasks.filter(t => t.assigned_agent_id === agent.id && t.status !== 'done');
+    const activeTask = tasks.find(t => t.assigned_agent_id === agent.id && t.status === 'in_progress');
+    agentTaskMap.set(agent.id, { active: activeTask, count: agentTasks.length });
+  }
   const [filter, setFilter] = useState<FilterTab>('all');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingAgent, setEditingAgent] = useState<Agent | null>(null);
@@ -254,15 +262,31 @@ export function AgentsSidebar({ workspaceId }: AgentsSidebarProps) {
                   </div>
                 </div>
 
-                {/* Status */}
-                <span
-                  className={`text-xs px-2 py-0.5 rounded uppercase ${getStatusBadge(
-                    agent.status
-                  )}`}
-                >
-                  {agent.status}
-                </span>
+                {/* Status + task count */}
+                <div className="flex items-center gap-1.5">
+                  {agentTaskMap.get(agent.id)?.count ? (
+                    <span className="text-[10px] bg-mc-accent/20 text-mc-accent px-1.5 py-0.5 rounded">
+                      {agentTaskMap.get(agent.id)!.count}
+                    </span>
+                  ) : null}
+                  <span
+                    className={`text-xs px-2 py-0.5 rounded uppercase ${getStatusBadge(
+                      agent.status
+                    )}`}
+                  >
+                    {agent.status}
+                  </span>
+                </div>
               </button>
+
+              {/* Active task context */}
+              {agentTaskMap.get(agent.id)?.active && (
+                <div className="px-2 pb-1">
+                  <div className="text-[10px] text-mc-text-secondary px-2 py-1 bg-mc-bg/50 rounded truncate">
+                    Working on: {agentTaskMap.get(agent.id)!.active!.title}
+                  </div>
+                </div>
+              )}
 
               {/* OpenClaw Connect Button - show for master agents */}
               {!!agent.is_master && (

@@ -23,13 +23,23 @@
 
 **VPS deploy — pm2 PATH:** Inside the Docker container, `pm2` is NOT in the default PATH. You must prepend it: `export PATH=/home/node/.openclaw/npm-persistent/node_modules/.bin:$PATH` before running `pm2` commands. The deploy command in CLAUDE.md includes this.
 
+## Key Subsystems
+
+**Initiative cache:** `initiative_cache` table is a read-only mirror of `INITIATIVES.json`. Populated by `scripts/sync-from-json.js`. Never write to it from MC code. See `docs/execution-types.md` and the "Initiative System" section in `CLAUDE.md`.
+
+**Subtasks:** Tasks support `parent_task_id` for one level of nesting (parent → child only, no grandchildren). Enforced at API layer in both POST and PATCH routes.
+
+**Task type validation:** `task_type_config` is validated via `superRefine` in `src/lib/validation.ts`. Each implemented type has a Zod schema (`TASK_TYPE_CONFIG_SCHEMAS`). See `docs/execution-types.md` for config schemas.
+
+**Planning dual systems:** The approve route (`/api/tasks/[id]/planning/approve`) reads from `tasks.planning_messages` and `tasks.planning_spec` columns (not from `planning_questions` / `planning_specs` tables). The `planning_questions` table is legacy.
+
 ## Testing Rules
 
 - Use real better-sqlite3 databases (temp files), NOT mocks
 - Each test file: `setupTestDb()` in `beforeAll`, `resetTables()` in `beforeEach`, `teardownTestDb()` in `afterAll`
 - Route handlers must be dynamically imported (`await import()`) AFTER `setupTestDb()` to ensure they see the test DB
-- Use seed helpers (`seedWorkspace`, `seedAgent`, `seedTask`, etc.) from `src/test/helpers/db.ts`
-- 101 tests total, 101/101 passing. All 4 test suites green. If tests fail, investigate — don't skip
+- Use seed helpers (`seedWorkspace`, `seedAgent`, `seedTask`, `seedInitiativeCache`, etc.) from `src/test/helpers/db.ts`
+- 124 tests total, 124/124 passing. All 7 test suites green. If tests fail, investigate — don't skip
 - **Visual QA:** After UI changes, use `/dogfood http://localhost:14040` for comprehensive browser-based testing — navigates every page, screenshots interactions, and produces structured bug reports with full repro evidence. Prefer this over ad-hoc browser clicks
 - Test behavior, not implementation — assert on API response shapes, not internal state
 - Visual QA with `/dogfood` is a hard gate for UI changes, not optional

@@ -10,6 +10,37 @@ export type TaskType =
   | 'openclaw-native' | 'claude-team' | 'multi-hypothesis'
   | 'e2e-validation' | 'prd-flow' | 'mcp-task';
 
+// ─── Initiative types ──────────────────────────────────────────────────────
+
+export type InitiativeStatus = 'planned' | 'in-progress' | 'completed' | 'canceled' | 'blocked';
+
+export interface InitiativeHistoryEntry {
+  status: string;
+  at: string;
+  by?: string;
+  note?: string;
+}
+
+export interface Initiative {
+  id: string;
+  title: string;
+  status: InitiativeStatus;
+  lead?: string;
+  participants?: string[];
+  priority?: string;
+  created?: string;
+  target?: string;
+  summary?: string;
+  source?: string;
+  external_request_id?: string;
+  history?: InitiativeHistoryEntry[];
+  workspace_id?: string;
+  synced_at: string;
+  // Computed at query time
+  task_count?: number;
+  completed_task_count?: number;
+}
+
 export interface ClaudeTeamConfig {
   team_size: number;
   team_members: Array<{ name: string; focus: string; role: string }>;
@@ -72,11 +103,13 @@ export interface Task {
   task_type_config?: string;
   completion_summary?: string;
   completed_at?: string;
+  parent_task_id?: string | null;
   created_at: string;
   updated_at: string;
   // Joined fields
   assigned_agent?: Agent;
   created_by_agent?: Agent;
+  subtasks?: Task[];
 }
 
 export interface Conversation {
@@ -274,6 +307,7 @@ export interface CreateTaskRequest {
   source?: string;
   task_type?: TaskType;
   task_type_config?: Record<string, unknown>;
+  parent_task_id?: string;
 }
 
 export interface UpdateTaskRequest extends Partial<CreateTaskRequest> {
@@ -528,7 +562,8 @@ export type SSEEventType =
   | 'agent_completed'
   | 'capability_updated'
   | 'integration_updated'
-  | 'health_check_completed';
+  | 'health_check_completed'
+  | 'initiative_updated';
 
 export interface SSEEvent {
   type: SSEEventType;

@@ -12,7 +12,7 @@ import { SSEDebugPanel } from '@/components/SSEDebugPanel';
 import { useMissionControl } from '@/lib/store';
 import { useSSE } from '@/hooks/useSSE';
 import { debug } from '@/lib/debug';
-import type { Task, Workspace } from '@/lib/types';
+import type { Task, Workspace, Initiative } from '@/lib/types';
 
 export default function WorkspacePage() {
   const params = useParams();
@@ -24,6 +24,7 @@ export default function WorkspacePage() {
     setEvents,
     setIsOnline,
     setIsLoading,
+    setInitiatives,
     isLoading,
   } = useMissionControl();
 
@@ -68,10 +69,11 @@ export default function WorkspacePage() {
         debug.api('Loading workspace data...', { workspaceId });
         
         // Fetch workspace-scoped data
-        const [agentsRes, tasksRes, eventsRes] = await Promise.all([
+        const [agentsRes, tasksRes, eventsRes, initiativesRes] = await Promise.all([
           fetch(`/api/agents?workspace_id=${workspaceId}`),
           fetch(`/api/tasks?workspace_id=${workspaceId}`),
           fetch('/api/events'),
+          fetch(`/api/initiatives?workspace_id=${workspaceId}`),
         ]);
 
         if (agentsRes.ok) setAgents(await agentsRes.json());
@@ -81,6 +83,11 @@ export default function WorkspacePage() {
           setTasks(tasksData);
         }
         if (eventsRes.ok) setEvents(await eventsRes.json());
+        if (initiativesRes.ok) {
+          const initData: Initiative[] = await initiativesRes.json();
+          debug.api('Loaded initiatives', { count: initData.length });
+          setInitiatives(initData);
+        }
       } catch (error) {
         console.error('Failed to load data:', error);
       } finally {
@@ -166,7 +173,7 @@ export default function WorkspacePage() {
       clearInterval(connectionCheck);
       clearInterval(taskPoll);
     };
-  }, [workspace, setAgents, setTasks, setEvents, setIsOnline, setIsLoading]);
+  }, [workspace, setAgents, setTasks, setEvents, setInitiatives, setIsOnline, setIsLoading]);
 
   if (notFound) {
     return (

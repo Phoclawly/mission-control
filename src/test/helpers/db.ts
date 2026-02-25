@@ -84,6 +84,7 @@ export function resetTables(): void {
     DELETE FROM messages;
     DELETE FROM conversation_participants;
     DELETE FROM conversations;
+    DELETE FROM initiative_cache;
     DELETE FROM events;
     DELETE FROM tasks;
     DELETE FROM agents;
@@ -173,6 +174,7 @@ export function seedTask(
     priority: string;
     task_type: string;
     task_type_config: string | null;
+    parent_task_id: string | null;
   }> = {}
 ): SeedTask {
   const task: SeedTask = {
@@ -186,9 +188,9 @@ export function seedTask(
     `INSERT INTO tasks
        (id, title, status, workspace_id, assigned_agent_id,
         external_request_id, source, initiative_id, priority,
-        task_type, task_type_config,
+        task_type, task_type_config, parent_task_id,
         created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       task.id, task.title, task.status, task.workspace_id,
       overrides.assigned_agent_id   ?? null,
@@ -198,10 +200,47 @@ export function seedTask(
       overrides.priority            ?? 'normal',
       overrides.task_type           ?? 'openclaw-native',
       overrides.task_type_config    ?? null,
+      overrides.parent_task_id      ?? null,
       now, now,
     ]
   );
   return task;
+}
+
+// ─── Initiative cache seed helper ─────────────────────────────────────────────
+
+export interface SeedInitiativeCache { id: string; title: string; status: string; workspace_id: string | null }
+export function seedInitiativeCache(
+  overrides: Partial<{
+    id: string; title: string; status: string; lead: string;
+    participants: string; priority: string; workspace_id: string | null;
+    summary: string; history: string;
+  }> = {}
+): SeedInitiativeCache {
+  const initiative: SeedInitiativeCache = {
+    id:           overrides.id           ?? 'INIT-001',
+    title:        overrides.title        ?? 'Test Initiative',
+    status:       overrides.status       ?? 'in-progress',
+    workspace_id: overrides.workspace_id ?? null,
+  };
+  const now = new Date().toISOString();
+  dbRun(
+    `INSERT INTO initiative_cache
+       (id, title, status, lead, participants, priority, workspace_id,
+        summary, history, synced_at, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      initiative.id, initiative.title, initiative.status,
+      overrides.lead         ?? null,
+      overrides.participants ?? null,
+      overrides.priority     ?? null,
+      initiative.workspace_id,
+      overrides.summary      ?? null,
+      overrides.history      ?? null,
+      now, now, now,
+    ]
+  );
+  return initiative;
 }
 
 // ─── Capabilities system seed helpers ─────────────────────────────────────────

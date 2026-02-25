@@ -1,6 +1,12 @@
 import { getProjectsPath, getMissionControlUrl } from '@/lib/config';
 import type { Task, TaskType, ClaudeTeamConfig, MultiHypothesisConfig } from '@/lib/types';
 
+export interface TaskTypeConfigSchema {
+  type: string;
+  properties: Record<string, { type: string; description?: string; minimum?: number; maximum?: number; items?: object }>;
+  required?: string[];
+}
+
 export interface TaskTypeMetadata {
   type: TaskType;
   label: string;
@@ -9,6 +15,7 @@ export interface TaskTypeMetadata {
   badgeColor: string;
   isImplemented: boolean;
   defaultConfig?: Record<string, unknown>;
+  configSchema?: TaskTypeConfigSchema | null;
 }
 
 export const TASK_TYPE_REGISTRY: TaskTypeMetadata[] = [
@@ -19,6 +26,7 @@ export const TASK_TYPE_REGISTRY: TaskTypeMetadata[] = [
     badge: 'OC',
     badgeColor: 'bg-blue-500/20 text-blue-400',
     isImplemented: true,
+    configSchema: null,
   },
   {
     type: 'claude-team',
@@ -28,6 +36,15 @@ export const TASK_TYPE_REGISTRY: TaskTypeMetadata[] = [
     badgeColor: 'bg-purple-500/20 text-purple-400',
     isImplemented: true,
     defaultConfig: { team_size: 2, team_members: [] },
+    configSchema: {
+      type: 'object',
+      properties: {
+        team_size: { type: 'number', description: 'Number of agents in the team', minimum: 1, maximum: 10 },
+        team_members: { type: 'array', description: 'Team member definitions', items: { type: 'object' } },
+        model: { type: 'string', description: 'Optional model override' },
+      },
+      required: ['team_size'],
+    },
   },
   {
     type: 'multi-hypothesis',
@@ -43,6 +60,14 @@ export const TASK_TYPE_REGISTRY: TaskTypeMetadata[] = [
         { label: 'Angle C', focus_description: '' },
       ],
     },
+    configSchema: {
+      type: 'object',
+      properties: {
+        hypotheses: { type: 'array', description: 'Investigation angles (1-10)', items: { type: 'object' } },
+        coordinator_agent_id: { type: 'string', description: 'Optional coordinator agent' },
+      },
+      required: ['hypotheses'],
+    },
   },
   {
     type: 'e2e-validation',
@@ -51,6 +76,7 @@ export const TASK_TYPE_REGISTRY: TaskTypeMetadata[] = [
     badge: 'E2E',
     badgeColor: 'bg-yellow-500/20 text-yellow-400',
     isImplemented: false,
+    configSchema: null,
   },
   {
     type: 'prd-flow',
@@ -59,6 +85,7 @@ export const TASK_TYPE_REGISTRY: TaskTypeMetadata[] = [
     badge: 'PRD',
     badgeColor: 'bg-green-500/20 text-green-400',
     isImplemented: false,
+    configSchema: null,
   },
   {
     type: 'mcp-task',
@@ -67,6 +94,7 @@ export const TASK_TYPE_REGISTRY: TaskTypeMetadata[] = [
     badge: 'MCP',
     badgeColor: 'bg-pink-500/20 text-pink-400',
     isImplemented: false,
+    configSchema: null,
   },
 ];
 
@@ -211,20 +239,57 @@ Create this directory and save all deliverables there.
 ${buildCallbackInstructions(task.id, missionControlUrl)}`;
 }
 
+// ─── Initiative context block ─────────────────────────────────────────────────
+
+export interface DispatchContext {
+  initiativeContext?: {
+    title: string;
+    status: string;
+    taskCount: number;
+  };
+}
+
+function buildInitiativeBlock(ctx?: DispatchContext): string {
+  if (!ctx?.initiativeContext) return '';
+  const ic = ctx.initiativeContext;
+  return `\n**INITIATIVE CONTEXT:**
+- Initiative: ${ic.title}
+- Status: ${ic.status}
+- Tasks in initiative: ${ic.taskCount}\n`;
+}
+
 // ─── Main router ──────────────────────────────────────────────────────────────
 
-export function buildDispatchMessage(task: Task & { assigned_agent_name?: string }): string {
+export function buildDispatchMessage(task: Task & { assigned_agent_name?: string }, context?: DispatchContext): string {
   const taskType = task.task_type || 'openclaw-native';
+  let message: string;
   switch (taskType) {
     case 'openclaw-native':
-      return buildOpenClawNativeMessage(task);
+      message = buildOpenClawNativeMessage(task);
+      break;
     case 'claude-team':
-      return buildClaudeTeamMessage(task);
+      message = buildClaudeTeamMessage(task);
+      break;
     case 'multi-hypothesis':
-      return buildMultiHypothesisMessage(task);
+      message = buildMultiHypothesisMessage(task);
+      break;
     default: {
       const meta = getTaskTypeMetadata(taskType);
       throw new Error(`Task type '${taskType}' is not yet implemented for dispatch.${meta ? ` (${meta.label})` : ''}`);
     }
   }
+
+  // Inject initiative context after the first header block
+  const initiativeBlock = buildInitiativeBlock(context);
+  if (initiativeBlock) {
+    // Insert after the first blank line following the header
+    const firstDoubleNewline = message.indexOf('\n\n');
+    if (firstDoubleNewline > 0) {
+      message = message.slice(0, firstDoubleNewline) + '\n' + initiativeBlock + message.slice(firstDoubleNewline);
+    } else {
+      message = initiativeBlock + '\n' + message;
+    }
+  }
+
+  return message;
 }

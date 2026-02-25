@@ -131,10 +131,30 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       );
     }
 
+    // Fetch initiative context if task belongs to one
+    let initiativeContext: { title: string; status: string; taskCount: number } | undefined;
+    if (task.initiative_id) {
+      const initiative = queryOne<{ title: string; status: string }>(
+        'SELECT title, status FROM initiative_cache WHERE id = ?',
+        [task.initiative_id]
+      );
+      if (initiative) {
+        const taskCount = queryOne<{ cnt: number }>(
+          'SELECT COUNT(*) as cnt FROM tasks WHERE initiative_id = ?',
+          [task.initiative_id]
+        );
+        initiativeContext = {
+          title: initiative.title,
+          status: initiative.status,
+          taskCount: taskCount?.cnt || 0,
+        };
+      }
+    }
+
     // Build task message for agent
     let defaultTaskMessage: string;
     try {
-      defaultTaskMessage = buildDispatchMessage(task);
+      defaultTaskMessage = buildDispatchMessage(task, { initiativeContext });
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Unsupported task type';
       return NextResponse.json({ error: msg }, { status: 400 });

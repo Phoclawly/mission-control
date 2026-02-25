@@ -1,55 +1,40 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
-import type { PlanningQuestion, PlanningCategory } from '@/lib/types';
 
-// Generate markdown spec from answered questions
-function generateSpecMarkdown(task: { title: string; description?: string }, questions: PlanningQuestion[]): string {
+interface PlanningMessage {
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  timestamp?: string;
+}
+
+// Generate spec markdown from planning message history (Q&A extraction)
+function generateSpecFromMessages(task: { title: string; description?: string }, messages: PlanningMessage[]): string {
   const lines: string[] = [];
-  
+
   lines.push(`# ${task.title}`);
   lines.push('');
-  lines.push('**Status:** SPEC LOCKED ✅');
+  lines.push('**Status:** SPEC LOCKED');
   lines.push('');
-  
+
   if (task.description) {
     lines.push('## Original Request');
     lines.push(task.description);
     lines.push('');
   }
 
-  // Group questions by category
-  const byCategory = questions.reduce((acc, q) => {
-    if (!acc[q.category]) acc[q.category] = [];
-    acc[q.category].push(q);
-    return acc;
-  }, {} as Record<string, PlanningQuestion[]>);
+  // Extract Q&A pairs from message history
+  lines.push('## Planning Discussion');
+  lines.push('');
 
-  const categoryLabels: Record<PlanningCategory, string> = {
-    goal: '🎯 Goal & Success Criteria',
-    audience: '👥 Target Audience',
-    scope: '📋 Scope',
-    design: '🎨 Design & Visual',
-    content: '📝 Content',
-    technical: '⚙️ Technical Requirements',
-    timeline: '📅 Timeline',
-    constraints: '⚠️ Constraints'
-  };
+  for (let i = 0; i < messages.length; i++) {
+    const msg = messages[i];
+    if (msg.role === 'system') continue;
 
-  const categoryOrder: PlanningCategory[] = ['goal', 'audience', 'scope', 'design', 'content', 'technical', 'timeline', 'constraints'];
-
-  for (const category of categoryOrder) {
-    const categoryQuestions = byCategory[category];
-    if (!categoryQuestions || categoryQuestions.length === 0) continue;
-
-    lines.push(`## ${categoryLabels[category]}`);
-    lines.push('');
-
-    for (const q of categoryQuestions) {
-      if (q.answer) {
-        lines.push(`**${q.question}**`);
-        lines.push(`> ${q.answer}`);
-        lines.push('');
-      }
+    if (msg.role === 'assistant') {
+      lines.push(`**Q:** ${msg.content}`);
+    } else if (msg.role === 'user') {
+      lines.push(`> ${msg.content}`);
+      lines.push('');
     }
   }
 
@@ -67,74 +52,85 @@ export async function POST(
   const { id: taskId } = await params;
 
   try {
-    // Get task
-    const task = getDb().prepare('SELECT * FROM tasks WHERE id = ?').get(taskId) as { id: string; title: string; description?: string; status: string } | undefined;
+    const db = getDb();
+
+    // Get task with planning columns
+    const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(taskId) as {
+      id: string;
+      title: string;
+      description?: string;
+      status: string;
+      planning_messages?: string;
+      planning_spec?: string;
+      planning_complete?: number;
+    } | undefined;
+
     if (!task) {
       return NextResponse.json({ error: 'Task not found' }, { status: 404 });
     }
 
     // Check if already locked
-    const existingSpec = getDb().prepare(
-      'SELECT * FROM planning_specs WHERE task_id = ?'
-    ).get(taskId);
-
-    if (existingSpec) {
+    if (task.planning_complete === 1) {
       return NextResponse.json({ error: 'Spec already locked' }, { status: 400 });
     }
 
-    // Get all questions
-    const questions = getDb().prepare(
-      'SELECT * FROM planning_questions WHERE task_id = ? ORDER BY sort_order'
-    ).all(taskId) as PlanningQuestion[];
+    // Determine the spec markdown
+    let specMarkdown: string;
 
-    // Check if all questions are answered
-    const unanswered = questions.filter(q => !q.answer);
-    if (unanswered.length > 0) {
-      return NextResponse.json({ 
-        error: 'All questions must be answered before locking',
-        unanswered: unanswered.length
-      }, { status: 400 });
+    if (task.planning_spec) {
+      // Spec already written on the task — use it directly
+      specMarkdown = task.planning_spec;
+    } else {
+      // Generate spec from planning messages
+      const messages: PlanningMessage[] = task.planning_messages
+        ? JSON.parse(task.planning_messages)
+        : [];
+
+      if (messages.length === 0) {
+        return NextResponse.json({
+          error: 'No planning spec or messages found — nothing to approve',
+        }, { status: 400 });
+      }
+
+      specMarkdown = generateSpecFromMessages(task, messages);
     }
 
-    // Parse options for each question
-    const parsedQuestions = questions.map(q => ({
-      ...q,
-      options: q.options ? JSON.parse(q.options as unknown as string) : undefined
-    }));
-
-    // Generate spec markdown
-    const specMarkdown = generateSpecMarkdown(task, parsedQuestions);
-
-    // Create spec record
-    const specId = crypto.randomUUID();
-    getDb().prepare(`
-      INSERT INTO planning_specs (id, task_id, spec_markdown, locked_at)
-      VALUES (?, ?, ?, datetime('now'))
-    `).run(specId, taskId, specMarkdown);
-
-    // Update task description with spec and move to inbox
-    getDb().prepare(`
-      UPDATE tasks 
-      SET description = ?, status = 'inbox', updated_at = datetime('now')
+    // Lock the spec and move to inbox
+    db.prepare(`
+      UPDATE tasks
+      SET planning_complete = 1,
+          planning_spec = ?,
+          status = 'inbox',
+          description = ?,
+          updated_at = datetime('now')
       WHERE id = ?
-    `).run(specMarkdown, taskId);
+    `).run(specMarkdown, specMarkdown, taskId);
+
+    // Write to planning_specs table for backward compatibility
+    const specId = crypto.randomUUID();
+    try {
+      db.prepare(`
+        INSERT INTO planning_specs (id, task_id, spec_markdown, locked_at)
+        VALUES (?, ?, ?, datetime('now'))
+      `).run(specId, taskId, specMarkdown);
+    } catch {
+      // planning_specs table may not exist — non-fatal
+    }
 
     // Log activity
-    const activityId = crypto.randomUUID();
-    getDb().prepare(`
-      INSERT INTO task_activities (id, task_id, activity_type, message)
-      VALUES (?, ?, 'status_changed', 'Planning complete - spec locked and moved to inbox')
-    `).run(activityId, taskId);
-
-    // Get the created spec
-    const spec = getDb().prepare(
-      'SELECT * FROM planning_specs WHERE id = ?'
-    ).get(specId);
+    try {
+      const activityId = crypto.randomUUID();
+      db.prepare(`
+        INSERT INTO task_activities (id, task_id, activity_type, message)
+        VALUES (?, ?, 'status_changed', 'Planning complete - spec locked and moved to inbox')
+      `).run(activityId, taskId);
+    } catch {
+      // Non-fatal if task_activities table is missing
+    }
 
     return NextResponse.json({
       success: true,
-      spec,
-      specMarkdown
+      specMarkdown,
     });
   } catch (error) {
     console.error('Failed to approve spec:', error);

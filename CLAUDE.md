@@ -34,7 +34,7 @@ Next.js dashboard for managing OpenClaw agent workspaces, capabilities, integrat
 | `src/lib/types.ts` | All TypeScript interfaces and types |
 | `src/lib/db/` | Database module (`index.ts` helpers, `schema.ts`, `migrations.ts`, `seed.ts`) |
 | `src/app/api/` | API routes |
-| `src/test/__tests__/` | Vitest unit/integration tests (4 files, 100 tests) |
+| `src/test/__tests__/` | Vitest unit/integration tests (7 files, 124 tests) |
 | `src/test/helpers/db.ts` | Test DB lifecycle + seed helpers (owns its own better-sqlite3 connection) |
 | `tests/e2e/` | Playwright E2E tests |
 | `src/lib/db/migrations.ts` | Schema migrations (idempotent, never reorder/remove) |
@@ -126,12 +126,24 @@ npx vitest run src/test/__tests__/tasks.test.ts  # single file
 | `CLAUDE.md` | Project context, stack, conventions (this file) |
 | `AGENTS.md` | Agent-facing gotchas, anti-patterns, testing rules |
 | `docs/` | Architecture docs (orchestration, heartbeat, realtime, production) |
+| `docs/execution-types.md` | Task type system: registry, config schemas, dispatch, how to add types |
 | `changelog/` | Daily changelog entries |
+
+## Initiative System
+
+Initiatives are multi-agent stories/epics tracked in `INITIATIVES.json` (source of truth, read by agents). MC maintains a **read-only** `initiative_cache` SQLite table populated by `scripts/sync-from-json.js`. MC never writes to `initiative_cache` directly — the sync daemon handles JSON→SQLite mirroring.
+
+- **API:** `GET /api/initiatives`, `GET /api/initiatives/[id]` — read from cache
+- **Task linking:** Tasks reference initiatives via `initiative_id` (e.g. `INIT-001`)
+- **Subtasks:** Tasks support one level of nesting via `parent_task_id` (depth limit: 2)
+- **Writeback:** When task status changes, `writebackToInitiatives()` updates INITIATIVES.json
+- **Task types:** `GET /api/task-types` — agents discover available execution types; config validated via `superRefine` in validation.ts
+- **Planning approve:** Reads from `tasks.planning_messages` + `tasks.planning_spec` (not `planning_questions` table)
 
 ## Quality Gates (before commit)
 
 1. `npm run build` — zero type errors
-2. `npx vitest run` — all 101 tests pass (101/101 expected)
+2. `npx vitest run` — all 124 tests pass (124/124 expected)
 3. Verify the change works on `localhost:14040` if it touches UI
 4. `/dogfood http://localhost:14040` — mandatory after ANY UI change (not optional)
 

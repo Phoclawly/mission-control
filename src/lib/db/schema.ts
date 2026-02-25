@@ -67,6 +67,7 @@ CREATE TABLE IF NOT EXISTS tasks (
   evaluation_status TEXT DEFAULT 'none' CHECK (evaluation_status IN ('none', 'pending', 'running', 'completed', 'skipped')),
   completion_summary TEXT,
   completed_at TEXT,
+  parent_task_id TEXT,
   created_at TEXT DEFAULT (datetime('now')),
   updated_at TEXT DEFAULT (datetime('now'))
 );
@@ -278,6 +279,27 @@ CREATE TABLE IF NOT EXISTS agent_learnings_index (
   UNIQUE(agent_id)
 );
 
+-- Initiative cache (read-only mirror of INITIATIVES.json, populated by sync daemon)
+CREATE TABLE IF NOT EXISTS initiative_cache (
+  id TEXT PRIMARY KEY,
+  title TEXT NOT NULL,
+  status TEXT NOT NULL,
+  lead TEXT,
+  participants TEXT,
+  priority TEXT,
+  created TEXT,
+  target TEXT,
+  summary TEXT,
+  source TEXT,
+  external_request_id TEXT,
+  history TEXT,
+  raw_json TEXT,
+  workspace_id TEXT,
+  synced_at TEXT NOT NULL,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
+);
+
 -- Indexes for performance
 CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
 CREATE INDEX IF NOT EXISTS idx_tasks_assigned ON tasks(assigned_agent_id);
@@ -305,4 +327,7 @@ CREATE INDEX IF NOT EXISTS idx_cron_jobs_status ON cron_jobs(status);
 CREATE INDEX IF NOT EXISTS idx_agent_memory_agent_date ON agent_memory_index(agent_id, date DESC);
 CREATE INDEX IF NOT EXISTS idx_agent_learnings_agent ON agent_learnings_index(agent_id);
 CREATE INDEX IF NOT EXISTS idx_tasks_evaluation_status ON tasks(evaluation_status);
+CREATE INDEX IF NOT EXISTS idx_initiative_cache_status ON initiative_cache(status);
+CREATE INDEX IF NOT EXISTS idx_initiative_cache_workspace ON initiative_cache(workspace_id);
+CREATE INDEX IF NOT EXISTS idx_tasks_parent ON tasks(parent_task_id);
 `;

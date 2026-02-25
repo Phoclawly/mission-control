@@ -4,28 +4,21 @@ import { useState } from 'react';
 import { X, Save, Plus } from 'lucide-react';
 import { useMissionControl } from '@/lib/store';
 import type { InitiativeStatus } from '@/lib/types';
-
 interface InitiativeModalProps {
   onClose: () => void;
   workspaceId?: string;
 }
 
-const STATUSES: { value: InitiativeStatus; label: string }[] = [
-  { value: 'planned', label: 'Planned' },
-  { value: 'in-progress', label: 'In Progress' },
-  { value: 'blocked', label: 'Blocked' },
-];
-
 export function InitiativeModal({ onClose, workspaceId }: InitiativeModalProps) {
   const { agents, addInitiative } = useMissionControl();
+  const masterAgent = agents.find((a) => a.is_master);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [quickTasksText, setQuickTasksText] = useState('');
   const [quickTasksCreated, setQuickTasksCreated] = useState(0);
   const [form, setForm] = useState({
     title: '',
     summary: '',
-    status: 'planned' as InitiativeStatus,
-    lead: '',
+    lead: masterAgent?.id || '',
     priority: 'normal',
   });
 
@@ -41,7 +34,7 @@ export function InitiativeModal({ onClose, workspaceId }: InitiativeModalProps) 
       const payload = {
         id,
         title: form.title,
-        status: form.status,
+        status: 'planned' as InitiativeStatus,
         lead: form.lead || undefined,
         priority: form.priority,
         summary: form.summary || undefined,
@@ -49,7 +42,7 @@ export function InitiativeModal({ onClose, workspaceId }: InitiativeModalProps) 
         workspace_id: workspaceId || 'default',
         created: now,
         synced_at: now,
-        history: JSON.stringify([{ status: form.status, at: now, by: 'user', note: 'Created from Mission Control' }]),
+        history: JSON.stringify([{ status: 'planned', at: now, by: 'user', note: 'Created from Mission Control' }]),
       };
 
       const res = await fetch('/api/initiatives', {
@@ -66,7 +59,7 @@ export function InitiativeModal({ onClose, workspaceId }: InitiativeModalProps) 
         createdInitiative = {
           ...payload,
           participants: [],
-          history: [{ status: form.status, at: now, by: 'user', note: 'Created from Mission Control' }],
+          history: [{ status: 'planned', at: now, by: 'user', note: 'Created from Mission Control' }],
           task_count: 0,
           completed_task_count: 0,
         };
@@ -142,32 +135,18 @@ export function InitiativeModal({ onClose, workspaceId }: InitiativeModalProps) 
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium mb-1">Status</label>
-              <select
-                value={form.status}
-                onChange={(e) => setForm({ ...form, status: e.target.value as InitiativeStatus })}
-                className="w-full bg-mc-bg border border-mc-border rounded px-3 py-2 text-sm focus:outline-none focus:border-mc-accent"
-              >
-                {STATUSES.map((s) => (
-                  <option key={s.value} value={s.value}>{s.label}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-1">Priority</label>
-              <select
-                value={form.priority}
-                onChange={(e) => setForm({ ...form, priority: e.target.value })}
-                className="w-full bg-mc-bg border border-mc-border rounded px-3 py-2 text-sm focus:outline-none focus:border-mc-accent"
-              >
-                <option value="low">Low</option>
-                <option value="normal">Normal</option>
-                <option value="high">High</option>
-                <option value="urgent">Urgent</option>
-              </select>
-            </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">Priority</label>
+            <select
+              value={form.priority}
+              onChange={(e) => setForm({ ...form, priority: e.target.value })}
+              className="w-full bg-mc-bg border border-mc-border rounded px-3 py-2 text-sm focus:outline-none focus:border-mc-accent"
+            >
+              <option value="low">Low</option>
+              <option value="normal">Normal</option>
+              <option value="high">High</option>
+              <option value="urgent">Urgent</option>
+            </select>
           </div>
 
           <div>

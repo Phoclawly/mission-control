@@ -21,7 +21,7 @@ interface TaskModalProps {
 }
 
 export function TaskModal({ task, onClose, workspaceId }: TaskModalProps) {
-  const { agents, addTask, updateTask, addEvent } = useMissionControl();
+  const { agents, initiatives, addTask, updateTask, addEvent } = useMissionControl();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showAgentModal, setShowAgentModal] = useState(false);
   const [usePlanningMode, setUsePlanningMode] = useState(false);
@@ -40,6 +40,7 @@ export function TaskModal({ task, onClose, workspaceId }: TaskModalProps) {
     status: task?.status || 'inbox' as TaskStatus,
     assigned_agent_id: task?.assigned_agent_id || '',
     due_date: task?.due_date || '',
+    initiative_id: task?.initiative_id || '',
     task_type: (task?.task_type || 'openclaw-native') as TaskType,
     task_type_config: task?.task_type_config ? JSON.parse(task.task_type_config) as Record<string, unknown> : {} as Record<string, unknown>,
   });
@@ -58,6 +59,7 @@ export function TaskModal({ task, onClose, workspaceId }: TaskModalProps) {
         status: (!task && usePlanningMode) ? 'planning' : form.status,
         assigned_agent_id: form.assigned_agent_id || null,
         due_date: form.due_date || null,
+        initiative_id: form.initiative_id || null,
         workspace_id: workspaceId || task?.workspace_id || 'default',
         source: task?.source || 'mission-control',
         task_type: form.task_type,
@@ -347,6 +349,23 @@ export function TaskModal({ task, onClose, workspaceId }: TaskModalProps) {
               <option value="__add_new__" className="text-mc-accent">
                 ➕ Add new agent...
               </option>
+            </select>
+          </div>
+
+          {/* Initiative */}
+          <div>
+            <label className="block text-sm font-medium mb-1">Initiative</label>
+            <select
+              value={form.initiative_id}
+              onChange={(e) => setForm({ ...form, initiative_id: e.target.value })}
+              className="w-full bg-mc-bg border border-mc-border rounded px-3 py-2 text-sm focus:outline-none focus:border-mc-accent"
+            >
+              <option value="">No initiative</option>
+              {initiatives.map((init) => (
+                <option key={init.id} value={init.id}>
+                  {init.title}
+                </option>
+              ))}
             </select>
           </div>
 

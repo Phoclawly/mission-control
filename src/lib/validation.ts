@@ -67,7 +67,7 @@ export const CreateTaskSchema = z.object({
   created_by_agent_id: AgentIdField.optional().transform(v => (v === '' || v === null) ? undefined : v),
   business_id: z.string().optional(),
   workspace_id: z.string().optional(),
-  initiative_id: z.string().regex(/^INIT-\d+$/i, 'initiative_id must be INIT-XXX format').optional().transform(v => v?.toUpperCase()),
+  initiative_id: z.string().regex(/^INIT-[A-Z0-9]+$/i, 'initiative_id must be INIT-XXX format').optional().transform(v => v?.toUpperCase()),
   external_request_id: z.string().min(1).max(255).optional(),
   source: z.string().min(1).max(64).optional(),
   // Accept null and convert to undefined
@@ -99,7 +99,7 @@ export const UpdateTaskSchema = z.object({
   priority: TaskPriority.optional(),
   assigned_agent_id: AgentIdField.optional().transform(v => (v === '') ? null : v),
   due_date: z.union([z.string(), z.null()]).optional(),
-  initiative_id: z.string().regex(/^INIT-\d+$/i, 'initiative_id must be INIT-XXX format').optional().transform(v => v?.toUpperCase()),
+  initiative_id: z.string().regex(/^INIT-[A-Z0-9]+$/i, 'initiative_id must be INIT-XXX format').optional().transform(v => v?.toUpperCase()),
   external_request_id: z.string().min(1).max(255).optional(),
   source: z.string().min(1).max(64).optional(),
   task_type: TaskTypeEnum.optional(),

@@ -53,8 +53,9 @@ npm run build
 git add <files> && git commit -m "..." && git push origin main
 
 # 3. Deploy on VPS (pull, build, restart)
+# NOTE: pm2 is NOT in default PATH inside container — must prepend it
 ssh mission-control-vps \
-  "docker exec botmaker-gateway bash -c 'cd /home/node/.openclaw/repos/mission-control && git pull && npm run build 2>&1 | tail -10 && pm2 restart mission-control'"
+  "docker exec botmaker-gateway bash -c 'export PATH=/home/node/.openclaw/npm-persistent/node_modules/.bin:\$PATH && cd /home/node/.openclaw/repos/mission-control && git pull && npm run build 2>&1 | tail -10 && pm2 restart mission-control'"
 ```
 
 ## Testing

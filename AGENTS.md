@@ -21,6 +21,8 @@
 
 **API helpers:** `src/lib/api-helpers.ts` provides `buildPatchQuery()` and `notFound()` for API routes. Use these instead of manual update/values arrays in PATCH handlers.
 
+**VPS deploy — pm2 PATH:** Inside the Docker container, `pm2` is NOT in the default PATH. You must prepend it: `export PATH=/home/node/.openclaw/npm-persistent/node_modules/.bin:$PATH` before running `pm2` commands. The deploy command in CLAUDE.md includes this.
+
 ## Testing Rules
 
 - Use real better-sqlite3 databases (temp files), NOT mocks

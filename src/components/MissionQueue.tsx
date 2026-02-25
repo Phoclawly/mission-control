@@ -716,14 +716,14 @@ function TaskCard({ task, agents, initiative, showInitiativeChip, onDragStart, o
         )}
 
         {/* Footer: priority + timestamp */}
-        <div className="flex items-center justify-between pt-2 border-t border-mc-border/20">
-          <div className="flex items-center gap-1.5">
+        <div className="flex items-center justify-between gap-2 pt-2 border-t border-mc-border/20">
+          <div className="flex items-center gap-1.5 flex-shrink-0">
             <div className={`w-1.5 h-1.5 rounded-full ${priorityDots[task.priority]}`} />
             <span className={`text-xs capitalize ${priorityStyles[task.priority]}`}>
               {task.priority}
             </span>
           </div>
-          <span className="text-[10px] text-mc-text-secondary/60">
+          <span className="text-[10px] text-mc-text-secondary/60 text-right truncate">
             {formatDistanceToNow(new Date(task.created_at), { addSuffix: true })}
           </span>
         </div>

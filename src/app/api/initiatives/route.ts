@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { queryAll } from '@/lib/db';
+import { queryAll, run, queryOne } from '@/lib/db';
 
 interface InitiativeCacheRow {
   id: string;
@@ -79,5 +79,45 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error('Failed to fetch initiatives:', error);
     return NextResponse.json({ error: 'Failed to fetch initiatives' }, { status: 500 });
+  }
+}
+
+// POST /api/initiatives - Create a new initiative
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const { id, title, status, lead, priority, summary, source, workspace_id, created, synced_at, history } = body;
+
+    if (!id || !title) {
+      return NextResponse.json({ error: 'id and title are required' }, { status: 400 });
+    }
+
+    run(
+      `INSERT INTO initiative_cache (id, title, status, lead, priority, summary, source, workspace_id, created, synced_at, history)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [id, title, status || 'planned', lead || null, priority || 'normal', summary || null, source || 'mission-control', workspace_id || 'default', created || new Date().toISOString(), synced_at || new Date().toISOString(), typeof history === 'string' ? history : JSON.stringify(history || [])]
+    );
+
+    const created_row = queryOne<InitiativeCacheRow>(
+      `SELECT ic.*, COUNT(t.id) as task_count, SUM(CASE WHEN t.status = 'done' THEN 1 ELSE 0 END) as completed_task_count
+       FROM initiative_cache ic LEFT JOIN tasks t ON t.initiative_id = ic.id
+       WHERE ic.id = ? GROUP BY ic.id`,
+      [id]
+    );
+
+    if (!created_row) {
+      return NextResponse.json({ error: 'Failed to read back created initiative' }, { status: 500 });
+    }
+
+    return NextResponse.json({
+      ...created_row,
+      participants: parseJsonField(created_row.participants),
+      history: parseJsonField(created_row.history),
+      task_count: Number(created_row.task_count),
+      completed_task_count: Number(created_row.completed_task_count),
+    }, { status: 201 });
+  } catch (error) {
+    console.error('Failed to create initiative:', error);
+    return NextResponse.json({ error: 'Failed to create initiative' }, { status: 500 });
   }
 }

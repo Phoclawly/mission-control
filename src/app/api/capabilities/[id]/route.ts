@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { queryOne, run } from '@/lib/db';
 import { UpdateCapabilitySchema } from '@/lib/validation';
 import { broadcast } from '@/lib/events';
+import { buildPatchQuery, notFound } from '@/lib/api-helpers';
 import type { Capability } from '@/lib/types';
 
 // GET /api/capabilities/[id] - Get a single capability
@@ -42,72 +43,25 @@ export async function PATCH(
     }
 
     const existing = queryOne<Capability>('SELECT * FROM capabilities WHERE id = ?', [id]);
-    if (!existing) {
-      return NextResponse.json({ error: 'Not found' }, { status: 404 });
-    }
+    if (!existing) return notFound('Capability');
 
     const data = validation.data;
-    const updates: string[] = [];
-    const values: unknown[] = [];
-
-    if (data.name !== undefined) {
-      updates.push('name = ?');
-      values.push(data.name);
-    }
-    if (data.category !== undefined) {
-      updates.push('category = ?');
-      values.push(data.category);
-    }
-    if (data.description !== undefined) {
-      updates.push('description = ?');
-      values.push(data.description);
-    }
-    if (data.provider !== undefined) {
-      updates.push('provider = ?');
-      values.push(data.provider);
-    }
-    if (data.version !== undefined) {
-      updates.push('version = ?');
-      values.push(data.version);
-    }
-    if (data.install_path !== undefined) {
-      updates.push('install_path = ?');
-      values.push(data.install_path);
-    }
-    if (data.config_ref !== undefined) {
-      updates.push('config_ref = ?');
-      values.push(data.config_ref);
-    }
-    if (data.is_shared !== undefined) {
-      updates.push('is_shared = ?');
-      values.push(data.is_shared ? 1 : 0);
-    }
-    if (data.status !== undefined) {
-      updates.push('status = ?');
-      values.push(data.status);
-    }
-    if (data.health_message !== undefined) {
-      updates.push('health_message = ?');
-      values.push(data.health_message);
-    }
-    if (data.last_health_check !== undefined) {
-      updates.push('last_health_check = ?');
-      values.push(data.last_health_check);
-    }
-    if (data.metadata !== undefined) {
-      updates.push('metadata = ?');
-      values.push(data.metadata);
+    // Convert boolean to SQLite integer before building query
+    const patchBody: Record<string, unknown> = { ...data };
+    if (patchBody.is_shared !== undefined) {
+      patchBody.is_shared = patchBody.is_shared ? 1 : 0;
     }
 
-    if (updates.length === 0) {
+    const patch = buildPatchQuery('capabilities', id, patchBody, [
+      'name', 'category', 'description', 'provider', 'version',
+      'install_path', 'config_ref', 'is_shared', 'status',
+      'health_message', 'last_health_check', 'metadata',
+    ]);
+    if (!patch) {
       return NextResponse.json({ error: 'No updates provided' }, { status: 400 });
     }
 
-    updates.push('updated_at = ?');
-    values.push(new Date().toISOString());
-    values.push(id);
-
-    run(`UPDATE capabilities SET ${updates.join(', ')} WHERE id = ?`, values);
+    run(patch.sql, patch.values);
 
     const capability = queryOne<Capability>('SELECT * FROM capabilities WHERE id = ?', [id]);
     broadcast({ type: 'capability_updated', payload: capability! });

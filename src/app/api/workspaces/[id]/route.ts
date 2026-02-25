@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDb } from '@/lib/db';
+import { getDb, queryOne, run } from '@/lib/db';
+import { buildPatchQuery, notFound } from '@/lib/api-helpers';
 
 // GET /api/workspaces/[id] - Get a single workspace
 export async function GET(
@@ -36,45 +37,19 @@ export async function PATCH(
   
   try {
     const body = await request.json();
-    const { name, description, icon } = body;
-    
-    const db = getDb();
-    
+
     // Check workspace exists
-    const existing = db.prepare('SELECT * FROM workspaces WHERE id = ?').get(id);
-    if (!existing) {
-      return NextResponse.json({ error: 'Workspace not found' }, { status: 404 });
-    }
-    
-    // Build update query dynamically
-    const updates: string[] = [];
-    const values: unknown[] = [];
-    
-    if (name !== undefined) {
-      updates.push('name = ?');
-      values.push(name);
-    }
-    if (description !== undefined) {
-      updates.push('description = ?');
-      values.push(description);
-    }
-    if (icon !== undefined) {
-      updates.push('icon = ?');
-      values.push(icon);
-    }
-    
-    if (updates.length === 0) {
+    const existing = queryOne('SELECT * FROM workspaces WHERE id = ?', [id]);
+    if (!existing) return notFound('Workspace');
+
+    const patch = buildPatchQuery('workspaces', id, body, ['name', 'description', 'icon']);
+    if (!patch) {
       return NextResponse.json({ error: 'No fields to update' }, { status: 400 });
     }
-    
-    updates.push("updated_at = datetime('now')");
-    values.push(id);
-    
-    db.prepare(`
-      UPDATE workspaces SET ${updates.join(', ')} WHERE id = ?
-    `).run(...values);
-    
-    const workspace = db.prepare('SELECT * FROM workspaces WHERE id = ?').get(id);
+
+    run(patch.sql, patch.values);
+
+    const workspace = queryOne('SELECT * FROM workspaces WHERE id = ?', [id]);
     return NextResponse.json(workspace);
   } catch (error) {
     console.error('Failed to update workspace:', error);

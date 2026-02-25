@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { v4 as uuidv4 } from 'uuid';
 import { queryOne, run } from '@/lib/db';
+import { buildPatchQuery, notFound } from '@/lib/api-helpers';
 import type { Agent, UpdateAgentRequest } from '@/lib/types';
 
 // GET /api/agents/[id] - Get a single agent
@@ -33,34 +34,10 @@ export async function PATCH(
     const body: UpdateAgentRequest = await request.json();
 
     const existing = queryOne<Agent>('SELECT * FROM agents WHERE id = ?', [id]);
-    if (!existing) {
-      return NextResponse.json({ error: 'Agent not found' }, { status: 404 });
-    }
+    if (!existing) return notFound('Agent');
 
-    const updates: string[] = [];
-    const values: unknown[] = [];
-
-    if (body.name !== undefined) {
-      updates.push('name = ?');
-      values.push(body.name);
-    }
-    if (body.role !== undefined) {
-      updates.push('role = ?');
-      values.push(body.role);
-    }
-    if (body.description !== undefined) {
-      updates.push('description = ?');
-      values.push(body.description);
-    }
-    if (body.avatar_emoji !== undefined) {
-      updates.push('avatar_emoji = ?');
-      values.push(body.avatar_emoji);
-    }
+    // Log status change event (side effect before update)
     if (body.status !== undefined) {
-      updates.push('status = ?');
-      values.push(body.status);
-
-      // Log status change event
       const now = new Date().toISOString();
       run(
         `INSERT INTO events (id, type, agent_id, message, created_at)
@@ -68,40 +45,22 @@ export async function PATCH(
         [uuidv4(), 'agent_status_changed', id, `${existing.name} is now ${body.status}`, now]
       );
     }
-    if (body.is_master !== undefined) {
-      updates.push('is_master = ?');
-      values.push(body.is_master ? 1 : 0);
-    }
-    if (body.soul_md !== undefined) {
-      updates.push('soul_md = ?');
-      values.push(body.soul_md);
-    }
-    if (body.user_md !== undefined) {
-      updates.push('user_md = ?');
-      values.push(body.user_md);
-    }
-    if (body.agents_md !== undefined) {
-      updates.push('agents_md = ?');
-      values.push(body.agents_md);
-    }
-    if (body.tools_md !== undefined) {
-      updates.push('tools_md = ?');
-      values.push(body.tools_md);
-    }
-    if (body.model !== undefined) {
-      updates.push('model = ?');
-      values.push(body.model);
+
+    // Convert boolean to SQLite integer before building query
+    const patchBody: Record<string, unknown> = { ...body };
+    if (patchBody.is_master !== undefined) {
+      patchBody.is_master = patchBody.is_master ? 1 : 0;
     }
 
-    if (updates.length === 0) {
+    const patch = buildPatchQuery('agents', id, patchBody, [
+      'name', 'role', 'description', 'status', 'avatar_emoji', 'soul_md',
+      'user_md', 'agents_md', 'is_master', 'model', 'tools_md',
+    ]);
+    if (!patch) {
       return NextResponse.json({ error: 'No updates provided' }, { status: 400 });
     }
 
-    updates.push('updated_at = ?');
-    values.push(new Date().toISOString());
-    values.push(id);
-
-    run(`UPDATE agents SET ${updates.join(', ')} WHERE id = ?`, values);
+    run(patch.sql, patch.values);
 
     const agent = queryOne<Agent>('SELECT * FROM agents WHERE id = ?', [id]);
     return NextResponse.json(agent);

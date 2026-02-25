@@ -219,4 +219,4 @@ If ANY of these are false, take action instead of saying HEARTBEAT_OK.
 
 ## Reference
 
-Full API documentation: See ORCHESTRATION.md in the mission-control project.
+Full API documentation: See orchestration.md in the mission-control docs directory.

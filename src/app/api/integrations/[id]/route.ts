@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { queryOne, run } from '@/lib/db';
 import { UpdateIntegrationSchema } from '@/lib/validation';
 import { broadcast } from '@/lib/events';
+import { buildPatchQuery, notFound } from '@/lib/api-helpers';
 import type { Integration } from '@/lib/types';
 
 // GET /api/integrations/[id] - Get a single integration
@@ -42,60 +43,18 @@ export async function PATCH(
     }
 
     const existing = queryOne<Integration>('SELECT * FROM integrations WHERE id = ?', [id]);
-    if (!existing) {
-      return NextResponse.json({ error: 'Not found' }, { status: 404 });
-    }
+    if (!existing) return notFound('Integration');
 
     const data = validation.data;
-    const updates: string[] = [];
-    const values: unknown[] = [];
-
-    if (data.name !== undefined) {
-      updates.push('name = ?');
-      values.push(data.name);
-    }
-    if (data.type !== undefined) {
-      updates.push('type = ?');
-      values.push(data.type);
-    }
-    if (data.provider !== undefined) {
-      updates.push('provider = ?');
-      values.push(data.provider);
-    }
-    if (data.status !== undefined) {
-      updates.push('status = ?');
-      values.push(data.status);
-    }
-    if (data.credential_source !== undefined) {
-      updates.push('credential_source = ?');
-      values.push(data.credential_source);
-    }
-    if (data.validation_message !== undefined) {
-      updates.push('validation_message = ?');
-      values.push(data.validation_message);
-    }
-    if (data.last_validated !== undefined) {
-      updates.push('last_validated = ?');
-      values.push(data.last_validated);
-    }
-    if (data.config !== undefined) {
-      updates.push('config = ?');
-      values.push(data.config);
-    }
-    if (data.metadata !== undefined) {
-      updates.push('metadata = ?');
-      values.push(data.metadata);
-    }
-
-    if (updates.length === 0) {
+    const patch = buildPatchQuery('integrations', id, data, [
+      'name', 'type', 'provider', 'status', 'credential_source',
+      'validation_message', 'last_validated', 'config', 'metadata',
+    ]);
+    if (!patch) {
       return NextResponse.json({ error: 'No updates provided' }, { status: 400 });
     }
 
-    updates.push('updated_at = ?');
-    values.push(new Date().toISOString());
-    values.push(id);
-
-    run(`UPDATE integrations SET ${updates.join(', ')} WHERE id = ?`, values);
+    run(patch.sql, patch.values);
 
     const integration = queryOne<Integration>('SELECT * FROM integrations WHERE id = ?', [id]);
     broadcast({ type: 'integration_updated', payload: integration! });

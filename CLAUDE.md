@@ -39,6 +39,9 @@ Next.js dashboard for managing OpenClaw agent workspaces, capabilities, integrat
 | `tests/e2e/` | Playwright E2E tests |
 | `src/lib/db/migrations.ts` | Schema migrations (idempotent, never reorder/remove) |
 | `src/lib/task-types.ts` | Pluggable task type registry (openclaw-native, claude-team, multi-hypothesis) |
+| `changelog/` | Daily changelog entries (YYYY-MM-DD.md) |
+| `docs/` | Architecture docs (orchestration, heartbeat, realtime, production setup) |
+| `src/lib/api-helpers.ts` | Shared API route utilities (buildPatchQuery, notFound) |
 
 ## Build & Deploy
 
@@ -107,8 +110,33 @@ npx vitest run src/test/__tests__/tasks.test.ts  # single file
 - PM2 `resurrect` can load stale dumps with old configs. If MC crashes post-resurrect: `pm2 delete all` + `pm2 start ecosystem.config.cjs` + `pm2 save`
 - Migrations run on first DB connection, NOT on code change — if MC was already running, apply migrations manually before restart
 
+## Code Hygiene
+
+- **Delete aggressively** — remove dead code, unused imports, stale comments
+- **Colocate** — keep related code together (component + types + styles)
+- **Rule of Three** — extract only when a pattern appears 3+ times
+- **Refactor hotspots** — when touching a file with tech debt, clean up what you touch
+- **Minimal code** — the best code is no code; solve with less whenever possible
+
+## Core Documentation
+
+| Doc | Purpose |
+|-----|---------|
+| `CLAUDE.md` | Project context, stack, conventions (this file) |
+| `AGENTS.md` | Agent-facing gotchas, anti-patterns, testing rules |
+| `docs/` | Architecture docs (orchestration, heartbeat, realtime, production) |
+| `changelog/` | Daily changelog entries |
+
 ## Quality Gates (before commit)
 
 1. `npm run build` — zero type errors
-2. `npx vitest run` — all tests pass (93/100 expected; 7 known middleware auth failures)
+2. `npx vitest run` — all 101 tests pass (101/101 expected)
 3. Verify the change works on `localhost:14040` if it touches UI
+4. `/dogfood http://localhost:14040` — mandatory after ANY UI change (not optional)
+
+## Post-Task Reflection
+
+After completing a significant task, ask:
+1. Did I discover a new gotcha or anti-pattern? → Add to AGENTS.md
+2. Did I change something that affects the build/deploy/test workflow? → Update this file
+3. Should future sessions know about this? → Add to changelog/

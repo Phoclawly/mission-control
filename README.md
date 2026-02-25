@@ -188,7 +188,7 @@ When `MC_API_TOKEN` is set:
 - Browser UI works automatically (same-origin requests are allowed)
 - SSE streams accept token as query param
 
-See [PRODUCTION_SETUP.md](PRODUCTION_SETUP.md) for the full production guide.
+See [PRODUCTION_SETUP.md](docs/production-setup.md) for the full production guide.
 
 ---
 

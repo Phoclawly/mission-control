@@ -221,7 +221,7 @@ Make sure you're registering sub-agents via the `/api/tasks/[id]/subagent` endpo
 ## 📚 More Information
 
 - **Full Testing Guide:** `docs/TESTING_REALTIME.md`
-- **Implementation Details:** `REALTIME_IMPLEMENTATION_SUMMARY.md`
+- **Implementation Details:** `realtime-implementation.md`
 - **API Specification:** `docs/REALTIME_SPEC.md`
 - **Changelog:** `CHANGELOG.md`
 

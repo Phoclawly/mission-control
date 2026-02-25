@@ -82,7 +82,7 @@ A comprehensive real-time integration system for Mission Control that provides f
 - `docs/REALTIME_SPEC.md` - Original specification (preserved)
 - `docs/TESTING_REALTIME.md` - Comprehensive testing guide
 - `CHANGELOG.md` - Updated with all new features
-- `REALTIME_IMPLEMENTATION_SUMMARY.md` - This document
+- `realtime-implementation.md` - This document
 
 ## 🏗️ Architecture
 

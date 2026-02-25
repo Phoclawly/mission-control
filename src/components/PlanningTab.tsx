@@ -317,7 +317,7 @@ export function PlanningTab({ taskId, onSpecLocked }: PlanningTabProps) {
       const data = await res.json();
 
       if (res.ok) {
-        console.log('Dispatch retry successful:', data.message);
+        // Dispatch retry succeeded
         setError(null);
       } else {
         setError(`Failed to retry dispatch: ${data.error}`);

@@ -452,18 +452,18 @@ const migrations: Migration[] = [
     }
   }
   ,{
-    id: '011',
+    id: '015b',
     name: 'add_task_type_columns',
     up: (db) => {
-      console.log('[Migration 011] Adding task_type columns to tasks...');
+      console.log('[Migration 015b] Adding task_type columns to tasks...');
       const tasksInfo = db.prepare("PRAGMA table_info(tasks)").all() as { name: string }[];
       if (!tasksInfo.some(col => col.name === 'task_type')) {
         db.exec(`ALTER TABLE tasks ADD COLUMN task_type TEXT DEFAULT 'openclaw-native'`);
-        console.log('[Migration 011] Added task_type to tasks');
+        console.log('[Migration 015b] Added task_type to tasks');
       }
       if (!tasksInfo.some(col => col.name === 'task_type_config')) {
         db.exec(`ALTER TABLE tasks ADD COLUMN task_type_config TEXT`);
-        console.log('[Migration 011] Added task_type_config to tasks');
+        console.log('[Migration 015b] Added task_type_config to tasks');
       }
       db.exec(`CREATE INDEX IF NOT EXISTS idx_tasks_task_type ON tasks(task_type)`);
     }
@@ -523,6 +523,13 @@ const migrations: Migration[] = [
  * Run all pending migrations
  */
 export function runMigrations(db: Database.Database): void {
+  // Detect duplicate migration IDs at startup
+  const ids = migrations.map(m => m.id);
+  const dupes = ids.filter((id, i) => ids.indexOf(id) !== i);
+  if (dupes.length > 0) {
+    throw new Error(`Duplicate migration IDs: ${dupes.join(', ')}`);
+  }
+
   // Create migrations tracking table
   db.exec(`
     CREATE TABLE IF NOT EXISTS _migrations (
@@ -531,7 +538,7 @@ export function runMigrations(db: Database.Database): void {
       applied_at TEXT DEFAULT (datetime('now'))
     )
   `);
-  
+
   // Get already applied migrations
   const applied = new Set(
     (db.prepare('SELECT id FROM _migrations').all() as { id: string }[]).map(m => m.id)

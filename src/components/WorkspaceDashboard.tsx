@@ -192,9 +192,9 @@ function WorkspaceCard({ workspace, onDelete }: { workspace: WorkspaceStats; onD
               onClick={handleActivateWorkspace}
               disabled={activating}
               className="px-2 py-1 text-xs rounded bg-mc-accent/20 text-mc-accent hover:bg-mc-accent/30 disabled:opacity-50"
-              title="Activate workspace"
+              title="Initialize workspace"
             >
-              {activating ? 'Activating...' : 'Activate'}
+              {activating ? 'Initializing...' : 'Initialize'}
             </button>
             {workspace.id !== 'default' && (
               <button
@@ -213,12 +213,17 @@ function WorkspaceCard({ workspace, onDelete }: { workspace: WorkspaceStats; onD
           </div>
         </div>
 
-        {/* Simple task/agent counts */}
-        <div className="flex items-center gap-4 text-sm text-mc-text-secondary mt-4">
+        {/* Task/agent counts with status breakdown */}
+        <div className="flex items-center gap-3 text-sm text-mc-text-secondary mt-4">
           <div className="flex items-center gap-1">
             <CheckSquare className="w-4 h-4" />
             <span>{workspace.taskCounts.total} tasks</span>
           </div>
+          <span className="text-mc-border">·</span>
+          <span className="text-mc-accent-green">{workspace.taskCounts.in_progress + workspace.taskCounts.testing + workspace.taskCounts.assigned} active</span>
+          <span className="text-mc-border">·</span>
+          <span>{workspace.taskCounts.done + workspace.taskCounts.review} done</span>
+          <span className="text-mc-border">·</span>
           <div className="flex items-center gap-1">
             <Users className="w-4 h-4" />
             <span>{workspace.agentCount} agents</span>

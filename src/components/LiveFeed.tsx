@@ -18,11 +18,11 @@ export function LiveFeed() {
   const filteredEvents = events.filter((event) => {
     if (filter === 'all') return true;
     if (filter === 'tasks')
-      return ['task_created', 'task_assigned', 'task_status_changed', 'task_completed'].includes(
+      return ['task_created', 'task_assigned', 'task_status_changed', 'task_completed', 'task_updated', 'task_deleted', 'activity_logged', 'deliverable_added'].includes(
         event.type
       );
     if (filter === 'agents')
-      return ['agent_joined', 'agent_status_changed', 'message_sent'].includes(event.type);
+      return ['agent_joined', 'agent_status_changed', 'message_sent', 'agent_spawned', 'agent_completed'].includes(event.type);
     return true;
   });
 
@@ -36,12 +36,30 @@ export function LiveFeed() {
         return '🔄';
       case 'task_completed':
         return '✅';
+      case 'task_updated':
+        return '📝';
+      case 'task_deleted':
+        return '🗑️';
+      case 'activity_logged':
+        return '📊';
+      case 'deliverable_added':
+        return '📦';
       case 'message_sent':
         return '💬';
       case 'agent_joined':
         return '🎉';
       case 'agent_status_changed':
         return '🔔';
+      case 'agent_spawned':
+        return '🚀';
+      case 'agent_completed':
+        return '🏁';
+      case 'capability_updated':
+        return '🔧';
+      case 'integration_updated':
+        return '🔌';
+      case 'health_check_completed':
+        return '🏥';
       case 'system':
         return '⚙️';
       default:
@@ -52,6 +70,7 @@ export function LiveFeed() {
   const getEventColor = (type: string) => {
     switch (type) {
       case 'task_completed':
+      case 'agent_completed':
         return 'text-mc-accent-green';
       case 'task_created':
         return 'text-mc-accent-pink';
@@ -60,6 +79,7 @@ export function LiveFeed() {
       case 'message_sent':
         return 'text-mc-accent';
       case 'agent_joined':
+      case 'agent_spawned':
         return 'text-mc-accent-cyan';
       default:
         return 'text-mc-text-secondary';
@@ -140,12 +160,30 @@ function EventItem({ event }: { event: Event }) {
         return '🔄';
       case 'task_completed':
         return '✅';
+      case 'task_updated':
+        return '📝';
+      case 'task_deleted':
+        return '🗑️';
+      case 'activity_logged':
+        return '📊';
+      case 'deliverable_added':
+        return '📦';
       case 'message_sent':
         return '💬';
       case 'agent_joined':
         return '🎉';
       case 'agent_status_changed':
         return '🔔';
+      case 'agent_spawned':
+        return '🚀';
+      case 'agent_completed':
+        return '🏁';
+      case 'capability_updated':
+        return '🔧';
+      case 'integration_updated':
+        return '🔌';
+      case 'health_check_completed':
+        return '🏥';
       case 'system':
         return '⚙️';
       default:
@@ -170,6 +208,11 @@ function EventItem({ event }: { event: Event }) {
           <p className={`text-sm ${isTaskEvent ? 'text-mc-accent-pink' : 'text-mc-text'}`}>
             {event.message}
           </p>
+          {event.agent && (
+            <span className="text-xs text-mc-accent-cyan">
+              {event.agent.avatar_emoji} {event.agent.name}
+            </span>
+          )}
           <div className="flex items-center gap-1 mt-1 text-xs text-mc-text-secondary">
             <Clock className="w-3 h-3" />
             {formatDistanceToNow(new Date(event.created_at), { addSuffix: true })}

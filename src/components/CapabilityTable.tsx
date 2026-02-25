@@ -22,7 +22,7 @@ function getStatusBadge(status: CapabilityStatus) {
       classes: 'bg-mc-accent-yellow/20 text-mc-accent-yellow border-mc-accent-yellow/30',
     },
     unknown: {
-      label: 'Unknown',
+      label: 'Not Checked',
       classes: 'bg-mc-bg-tertiary text-mc-text-secondary border-mc-border',
     },
     disabled: {
@@ -315,7 +315,7 @@ export function CapabilityTable({ agents = [] }: CapabilityTableProps) {
                           <td className="py-3 pr-4 text-mc-text-secondary">
                             {cap.last_health_check
                               ? formatDistanceToNow(new Date(cap.last_health_check), { addSuffix: true })
-                              : 'Never'}
+                              : '\u2014'}
                           </td>
                         </tr>
                       ))}

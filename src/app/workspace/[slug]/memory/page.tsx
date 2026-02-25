@@ -61,7 +61,7 @@ export default function MemoryPage() {
     async function loadAgents() {
       try {
         const [agentsRes] = await Promise.all([
-          fetch('/api/agents'),
+          fetch(`/api/agents?workspace_id=${workspace!.id}`),
         ]);
 
         if (agentsRes.ok) {

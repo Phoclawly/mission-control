@@ -82,7 +82,7 @@ export default function AgentsPage() {
     async function loadData() {
       try {
         const [agentsRes, tasksRes, eventsRes] = await Promise.all([
-          fetch('/api/agents'),
+          fetch(`/api/agents?workspace_id=${workspaceId}`),
           fetch(`/api/tasks?workspace_id=${workspaceId}`),
           fetch('/api/events'),
         ]);
